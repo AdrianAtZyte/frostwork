@@ -99,6 +99,8 @@ SHARED_PRESCAN_CASES = [
     ("quoted > does not end the tag", b'<meta http-equiv="content-type" content="text/html; charset=windows-1252" title="a>b">', W1252),
     ("whitespace around =", b"<meta charset\n=\nwindows-1252>", W1252),
     ("charset inside a comment declares nothing", b"<!-- <meta charset=big5> -->", U8),
+    ("<!--!> does not close a comment", b"<!--!><meta charset=big5>-->", U8),
+    ("<!---!> does not close a comment", b"<!---!><meta charset=big5>-->", U8),
     ("content= without http-equiv", b'<meta content="text/html; charset=big5">', U8),
     ("http-equiv content-type", b'<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">', W1252),
     ("bare charset attribute", b"<meta charset=utf-8>", U8),
