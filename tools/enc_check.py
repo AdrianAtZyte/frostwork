@@ -168,13 +168,14 @@ BROWSER_DIFFERENCES = [
      b"<html><head><!--><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
      ["café"], ["caf�"],
      "WHATWG's prescan ends a comment at the first `>` preceded by `--` and after the `<`, and the "
-     "`--` of `<!--` counts, so the <meta> after `<!-->` declares; w3lib looks for a `-->` after the "
-     "`<!--` and so treats the rest of the document as a comment"),
+     "`--` of `<!--` counts, so the <meta> after `<!-->` declares, as it does in Chromium 153 and Firefox "
+     "144; w3lib looks for a `-->` after the `<!--` and so treats the rest of the document as a comment"),
     ("--!> ends a comment",
      b"<html><head><!--x--!><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
      ["café"], ["caf�"],
-     "the HTML tokenizer ends a comment at `--!>`, and so does Frostwork's prescan; WHATWG's prescan "
-     "algorithm and w3lib only end one at `-->`. Not yet measured in a browser"),
+     "the HTML tokenizer ends a comment at `--!>`, and the <meta> after it declares in Chromium 153 and "
+     "Firefox 144, served as text/html with no charset; WHATWG's prescan algorithm and w3lib only end a "
+     "comment at `-->`"),
     ("the prescan does NOT stop at <body>",
      b'<html><head></head><body><meta charset="windows-1252">' + W1252 + b"</body></html>",
      ["café"], ["caf�"],
