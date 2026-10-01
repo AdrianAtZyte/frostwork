@@ -239,31 +239,33 @@ impl Plan {
     /// One streaming pass over `html`, returning one value-column per flat query (query order).
     /// The GIL is released for the duration of the scan (`html` is an immutable buffer and
     /// the compiled plan is read-only), so concurrent extracts on a thread pool run in parallel.
-    #[pyo3(signature = (html, encoding=None))]
+    #[pyo3(signature = (html, encoding=None, *, url=None))]
     fn extract(
         &self,
         py: Python<'_>,
         html: Html<'_>,
         encoding: Option<&str>,
+        url: Option<&str>,
     ) -> PyResult<Vec<Vec<String>>> {
         let encoding = html.encoding(py, encoding)?;
         let bytes = html.as_bytes();
-        Ok(py.detach(|| self.inner.extract(bytes, encoding).0))
+        Ok(py.detach(|| self.inner.extract(bytes, encoding, url).0))
     }
 
     /// One streaming pass returning `(flat_columns, grouped)` — see the `extract_grouped` free function.
     /// Releases the GIL for the duration of the scan, like `extract`.
-    #[pyo3(signature = (html, encoding=None))]
+    #[pyo3(signature = (html, encoding=None, *, url=None))]
     #[allow(clippy::type_complexity)]
     fn extract_grouped(
         &self,
         py: Python<'_>,
         html: Html<'_>,
         encoding: Option<&str>,
+        url: Option<&str>,
     ) -> PyResult<(Vec<Vec<String>>, Vec<Vec<Vec<Vec<String>>>>)> {
         let encoding = html.encoding(py, encoding)?;
         let bytes = html.as_bytes();
-        Ok(py.detach(|| self.inner.extract(bytes, encoding)))
+        Ok(py.detach(|| self.inner.extract(bytes, encoding, url)))
     }
 }
 
@@ -272,20 +274,21 @@ impl Plan {
 /// `HttpResponseBody`) or an already-decoded `str` — see [`Html`]; the pure-Python `frostwork.extract`
 /// wrapper converts the remaining bytes-likes.
 /// `encoding` is an optional charset label as Scrapy passes from `Content-Type`; `None` sniffs
-/// (BOM → `<meta>` → UTF-8). Unsupported queries yield an empty column — there is no fallback.
+/// (BOM → `<meta>` → autodetection), informed by the response `url`. Unsupported queries yield an empty column — there is no fallback.
 /// Raises `ValueError` if the schema exceeds the member/sibling-bit budget (a caller bug).
 #[pyfunction]
-#[pyo3(signature = (html, queries, encoding=None))]
+#[pyo3(signature = (html, queries, encoding=None, *, url=None))]
 fn extract(
     py: Python<'_>,
     html: Html<'_>,
     queries: Vec<Query>,
     encoding: Option<&str>,
+    url: Option<&str>,
 ) -> PyResult<Vec<Vec<String>>> {
     check_budget(&queries, &[])?;
     let encoding = html.encoding(py, encoding)?;
     let bytes = html.as_bytes();
-    Ok(py.detach(|| crate::extract(bytes, &queries, encoding)))
+    Ok(py.detach(|| crate::extract(bytes, &queries, encoding, url)))
 }
 
 /// One streaming pass returning `(flat_columns, grouped)`. `groups` is a list of
@@ -294,7 +297,7 @@ fn extract(
 /// Sub-field names are carried by the caller (the pure-Python `Page`/`webpoet` layer); the engine keys
 /// sub-columns positionally. Same one-pass, no-DOM, no-fallback semantics as `extract`.
 #[pyfunction]
-#[pyo3(signature = (html, flat_queries, groups, encoding=None))]
+#[pyo3(signature = (html, flat_queries, groups, encoding=None, *, url=None))]
 #[allow(clippy::type_complexity)]
 fn extract_grouped(
     py: Python<'_>,
@@ -302,12 +305,13 @@ fn extract_grouped(
     flat_queries: Vec<Query>,
     groups: PyGroups,
     encoding: Option<&str>,
+    url: Option<&str>,
 ) -> PyResult<(Vec<Vec<String>>, Vec<Vec<Vec<Vec<String>>>>)> {
     let gq = group_queries(groups);
     check_budget(&flat_queries, &gq)?;
     let encoding = html.encoding(py, encoding)?;
     let bytes = html.as_bytes();
-    Ok(py.detach(|| crate::extract_grouped(bytes, &flat_queries, &gq, encoding)))
+    Ok(py.detach(|| crate::extract_grouped(bytes, &flat_queries, &gq, encoding, url)))
 }
 
 /// Resolve `label` the way every Python entry point does — WHATWG labels first, then Python's codec
@@ -329,13 +333,18 @@ fn resolve_label(py: Python<'_>, label: &str) -> Option<&'static str> {
 /// document the browser already decoded, not the string in hand. Reporting the meta would be reporting
 /// an encoding the caller must not apply.
 #[pyfunction]
-#[pyo3(signature = (html, encoding=None))]
-fn detect_encoding(py: Python<'_>, html: Html<'_>, encoding: Option<&str>) -> PyResult<&'static str> {
+#[pyo3(signature = (html, encoding=None, *, url=None))]
+fn detect_encoding(
+    py: Python<'_>,
+    html: Html<'_>,
+    encoding: Option<&str>,
+    url: Option<&str>,
+) -> PyResult<&'static str> {
     let encoding = html.encoding(py, encoding)?; // refuses a label that would decode a str wrongly
     if let Html::Str(_) = html {
         return Ok("UTF-8");
     }
-    Ok(crate::detect_encoding(html.as_bytes(), encoding))
+    Ok(crate::detect_encoding(html.as_bytes(), encoding, url))
 }
 
 /// `Support` as a Python-facing `(supported: bool, reason: Optional[str])` tuple.

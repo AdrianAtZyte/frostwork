@@ -51,11 +51,12 @@ cols = frostwork.extract(html, ["h1::text", ".price::text", "img::attr(src)", "/
 assert cols == [["Widget"], ["$9"], ["/a.png"], ["/a.png"]]  # one column per query
 ```
 
-`extract(html, queries, encoding=None, *, strict=True, syntax=None)` accepts original `bytes` or an
+`extract(html, queries, encoding=None, *, url=None, strict=True, syntax=None)` accepts original `bytes` or an
 already-decoded `str`, whose UTF-8 view is borrowed without copying the document. Pass the response's
 charset label as `encoding` with bytes; use `None` or a UTF-8 label with `str`. `None` checks the BOM and
-declarations before defaulting to UTF-8. An unknown label raises, while a known label excluded by WHATWG
-is ignored and sniffing continues.
+declarations, then autodetects the encoding; pass the response URL as `url` so that autodetection can use
+its top-level domain, as browsers do. An unknown label raises, while a known label excluded by WHATWG is
+ignored and sniffing continues.
 
 A query starting with `/`, `./` or `normalize-space(` is read as XPath and anything else as CSS. Pass
 `syntax="css"` or `syntax="xpath"` to declare every query instead, when the caller knows: a relative
@@ -65,7 +66,7 @@ where declared as XPath it is refused as unsupported, like every relative path.
 Unsupported queries raise `UnsupportedSelector` before the HTML is scanned. Pass `strict=False` for
 permissive empty columns. [COMPATIBILITY.md](COMPATIBILITY.md) defines selector, value and encoding behavior.
 
-`detect_encoding(html, encoding=None)` answers the sniffing half on its own, as a WHATWG name:
+`detect_encoding(html, encoding=None, *, url=None)` answers the sniffing half on its own, as a WHATWG name:
 
 ```python
 frostwork.detect_encoding(b"<html><body><meta charset=windows-1252>")   # 'windows-1252'

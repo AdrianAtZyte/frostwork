@@ -12,7 +12,11 @@ Query = Union[str, Tuple[str, Optional[str]]]
 one of ``"css"``, ``"xpath"`` or ``None`` (auto)."""
 
 def extract(
-    html: Union[bytes, str], queries: Sequence[Query], encoding: Optional[str] = ...
+    html: Union[bytes, str],
+    queries: Sequence[Query],
+    encoding: Optional[str] = ...,
+    *,
+    url: Optional[str] = ...,
 ) -> List[List[str]]:
     """One streaming pass: one value-column per query, in query order."""
 
@@ -21,6 +25,8 @@ def extract_grouped(
     flat_queries: Sequence[Query],
     groups: Sequence[Tuple[Query, Sequence[Tuple[str, Query]]]],
     encoding: Optional[str] = ...,
+    *,
+    url: Optional[str] = ...,
 ) -> Tuple[List[List[str]], List[List[List[List[str]]]]]:
     """One streaming pass returning ``(flat_columns, grouped)`` — ``grouped[g][row][subfield][value]``."""
 
@@ -51,10 +57,13 @@ def resolve_label(label: str) -> Optional[str]:
     """Canonical WHATWG encoding name for ``label`` (e.g. ``"UTF-8"``), or ``None`` if neither WHATWG
     nor Python's codec set names a WHATWG encoding by it."""
 
-def detect_encoding(html: Union[bytes, str], encoding: Optional[str] = ...) -> str:
+def detect_encoding(
+    html: Union[bytes, str], encoding: Optional[str] = ..., *, url: Optional[str] = ...
+) -> str:
     """The encoding ``extract`` would scan this document with, as a WHATWG name: BOM → BOM-less UTF-16
-    prefix → ``encoding`` label → 4096-byte ``<meta>``/XML-declaration prescan → UTF-8. A ``str`` is
-    already-decoded text, so the answer is ``"UTF-8"`` without sniffing."""
+    prefix → ``encoding`` label → 4096-byte ``<meta>``/XML-declaration prescan → UTF-8 if valid, else
+    autodetected, informed by the top-level domain of ``url``. A ``str`` is already-decoded text, so
+    the answer is ``"UTF-8"`` without sniffing."""
 
 class Plan:
     """A schema compiled once (budget validated at construction) and reused across pages."""
@@ -68,7 +77,9 @@ class Plan:
         """``first_only[c]`` declares that flat column ``c``'s consumer keeps only the FIRST value. When
         every column says so and the schema is eligible, the scan stops as soon as each has one instead
         of running to EOF; the values a single-valued consumer sees are unchanged."""
-    def extract(self, html: Union[bytes, str], encoding: Optional[str] = ...) -> List[List[str]]: ...
+    def extract(
+        self, html: Union[bytes, str], encoding: Optional[str] = ..., *, url: Optional[str] = ...
+    ) -> List[List[str]]: ...
     def extract_grouped(
-        self, html: Union[bytes, str], encoding: Optional[str] = ...
+        self, html: Union[bytes, str], encoding: Optional[str] = ..., *, url: Optional[str] = ...
     ) -> Tuple[List[List[str]], List[List[List[List[str]]]]]: ...

@@ -55,7 +55,7 @@ def parse_product(self, response):
 ```
 
 Use `field_all` whenever you need every match, and `field_join` to join text nodes. Without an explicit
-encoding, Frostwork checks the BOM and declarations before defaulting to UTF-8. For positional columns
+encoding, Frostwork checks the BOM and declarations, then autodetects the encoding. For positional columns
 without field names, use the [primitive `extract` API](https://github.com/scrapy/frostwork/blob/main/docs/PYTHON.md#1-the-primitive).
 
 The same engine is a Rust library — `frostwork::extract(html, &queries, None)`, with `Page`/`Plan` for named

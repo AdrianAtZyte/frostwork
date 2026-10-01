@@ -35,11 +35,17 @@ pub type GroupRows = Vec<Vec<Vec<String>>>;
 /// whitespace-kept, entity-decoded semantics on the supported subset.
 ///
 /// `encoding` is an optional caller/HTTP charset label (as Scrapy passes); when `None` the encoding is
-/// sniffed (BOM -> `<meta>` -> UTF-8). Structural tokenization runs on raw bytes for every
+/// sniffed (BOM -> `<meta>` -> autodetection). `url` is the URL of the response, if known: the
+/// top-level domain of its host informs autodetection. Structural tokenization runs on raw bytes for every
 /// ASCII-compatible encoding; only the small emitted values are decoded with the resolved encoding.
 /// UTF-16LE/BE are transcoded to UTF-8 up front (rare).
-pub fn extract<Q: AsQuery>(html: &[u8], queries: &[Q], encoding: Option<&str>) -> Vec<Vec<String>> {
-    extract_grouped(html, queries, &[], encoding).0
+pub fn extract<Q: AsQuery>(
+    html: &[u8],
+    queries: &[Q],
+    encoding: Option<&str>,
+    url: Option<&str>,
+) -> Vec<Vec<String>> {
+    extract_grouped(html, queries, &[], encoding, url).0
 }
 
 /// A `Many`/`One` grouped query: for every element matching `container`, extract each `subfields`
@@ -212,17 +218,17 @@ fn compile_schema<Q: AsQuery>(
 
 /// The encoding [`extract`] would scan `html` with, as a WHATWG canonical name (`"UTF-8"`,
 /// `"windows-1252"`, `"Shift_JIS"`, …). `label` is the caller/HTTP charset a response supplies, or
-/// `None` to sniff.
+/// `None` to sniff, and `url` the response URL, as in [`extract`].
 ///
 /// The same resolution `extract` runs — BOM → BOM-less UTF-16 prefix → label → browser-bounded
-/// `<meta>`/XML-declaration prescan → UTF-8 — exposed on its own because it is useful without an
+/// `<meta>`/XML-declaration prescan → autodetection — exposed on its own because it is useful without an
 /// extraction, and because nothing else in a scraper's stack answers this question the way a browser
 /// does. Parsel does not sniff at all (`Selector(body=…)` defaults to UTF-8), and w3lib — what Scrapy
 /// uses — differs from browsers in the places tabulated under Encoding in docs/COMPATIBILITY.md. The
 /// answer is always a real encoding: an unresolvable label is ignored rather than propagated, per
 /// WHATWG's "failure, continue".
-pub fn detect_encoding(html: &[u8], label: Option<&str>) -> &'static str {
-    encoding::resolve(html, label).name()
+pub fn detect_encoding(html: &[u8], label: Option<&str>, url: Option<&str>) -> &'static str {
+    encoding::resolve(html, label, url).name()
 }
 
 /// The `(member-selector, sibling-bit)` demand of a schema. A caller
@@ -538,8 +544,9 @@ pub fn audit_schema<Q: AsQuery>(queries: &[Q], groups: &[GroupQuery<Q>]) -> Sche
 fn prepare_bytes<'h>(
     html: &'h [u8],
     encoding: Option<&str>,
+    url: Option<&str>,
 ) -> (Cow<'h, [u8]>, &'static encoding_rs::Encoding) {
-    let enc = encoding::resolve(html, encoding);
+    let enc = encoding::resolve(html, encoding, url);
     if !enc.is_ascii_compatible() {
         // Transcode FIRST: in UTF-16 every ASCII character carries a 0x00 byte, so deleting NUL bytes
         // from the raw input would shred the document. What must go is the U+0000 CHARACTER, which only
@@ -698,11 +705,17 @@ impl Plan {
     }
 
     /// Run the compiled schema over one page. `encoding` is an optional charset label (as Scrapy
-    /// passes from `Content-Type`); `None` sniffs (BOM → `<meta>` → UTF-8). Returns `(flat_columns,
+    /// passes from `Content-Type`); `None` sniffs (BOM → `<meta>` → autodetection), informed by `url`
+    /// as in [`extract`]. Returns `(flat_columns,
     /// grouped)` — byte-identical to [`extract_grouped`] with the same schema.
-    pub fn extract(&self, html: &[u8], encoding: Option<&str>) -> (FlatColumns, Vec<GroupRows>) {
+    pub fn extract(
+        &self,
+        html: &[u8],
+        encoding: Option<&str>,
+        url: Option<&str>,
+    ) -> (FlatColumns, Vec<GroupRows>) {
         // Keep the prepared `Cow` alive here: the matcher borrows its bytes for the whole scan.
-        let (bytes, value_enc) = prepare_bytes(html, encoding);
+        let (bytes, value_enc) = prepare_bytes(html, encoding, url);
         self.schema.run(matcher::EncodedInput::new(&bytes, value_enc))
     }
 }
@@ -717,8 +730,9 @@ pub fn extract_grouped<Q: AsQuery>(
     queries: &[Q],
     groups: &[GroupQuery<Q>],
     encoding: Option<&str>,
+    url: Option<&str>,
 ) -> (FlatColumns, Vec<GroupRows>) {
-    Plan::compile(queries, groups).extract(html, encoding)
+    Plan::compile(queries, groups).extract(html, encoding, url)
 }
 
 #[cfg(test)]
@@ -726,7 +740,7 @@ mod tests {
     use super::*;
 
     fn ex(html: &str, q: &str) -> Vec<String> {
-        extract(html.as_bytes(), &[q.to_string()], None).pop().unwrap()
+        extract(html.as_bytes(), &[q.to_string()], None, None).pop().unwrap()
     }
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
@@ -738,7 +752,7 @@ mod tests {
             container: container.to_string(),
             subfields: subs.iter().map(|s| (s.to_string(), s.to_string())).collect(),
         };
-        extract_grouped(html.as_bytes(), &[], &[g], None).1.pop().unwrap()
+        extract_grouped(html.as_bytes(), &[], &[g], None, None).1.pop().unwrap()
     }
 
     #[test]
@@ -842,9 +856,9 @@ mod tests {
     fn a_declared_syntax_overrides_prefix_routing() {
         let html = b"<html><body><h1>T</h1></body></html>";
         let auto = ["h1".to_string(), "/html".to_string()];
-        assert_eq!(extract(html, &auto, None), vec![v(&["<h1>T</h1>"]), v(&["<html><body><h1>T</h1></body></html>"])]);
+        assert_eq!(extract(html, &auto, None, None), vec![v(&["<h1>T</h1>"]), v(&["<html><body><h1>T</h1></body></html>"])]);
         let declared = [Query::new("h1", Syntax::XPath), Query::new("/html", Syntax::Css)];
-        assert_eq!(extract(html, &declared, None), vec![v(&[]), v(&[])]);
+        assert_eq!(extract(html, &declared, None, None), vec![v(&[]), v(&[])]);
         let audit = audit_schema(&declared, &[]);
         assert_eq!(audit.flat.len(), 2);
         assert!(audit.flat[0].reason().unwrap().contains("relative"));
@@ -868,7 +882,7 @@ mod tests {
         assert!(!audit.groups[0].subfields[0].is_supported());
         assert!(audit.groups[0].subfields[1].is_supported());
         assert!(audit.groups[0].subfields[2].is_supported());
-        let rows = extract_grouped(html, &[], &[group], None).1.pop().unwrap();
+        let rows = extract_grouped(html, &[], &[group], None, None).1.pop().unwrap();
         assert_eq!(rows, vec![vec![v(&[]), v(&["T"]), v(&["T"])]]);
     }
 
@@ -945,7 +959,7 @@ mod tests {
             let queries = vec![q.to_string(); 65];
             let audit = audit_schema(&queries, &[]);
             assert!(audit.ok(), "{q}: {audit:?}");
-            let cols = extract(html.as_bytes(), &queries, None);
+            let cols = extract(html.as_bytes(), &queries, None, None);
             assert_eq!(cols.len(), 65);
             assert!(cols.iter().all(|c| c == &v(&[expected])), "{q}: last={:?}", cols.last());
         }
@@ -1340,7 +1354,7 @@ mod tests {
             container: ".p".to_string(),
             subfields: vec![("t".to_string(), "a::text".to_string())],
         };
-        let (flat, grouped) = extract_grouped(html.as_bytes(), &["h1::text".to_string()], &[g], None);
+        let (flat, grouped) = extract_grouped(html.as_bytes(), &["h1::text".to_string()], &[g], None, None);
         assert_eq!(flat, vec![v(&["Shop"])]);
         assert_eq!(grouped[0], vec![vec![v(&["A"])], vec![v(&["B"])]]);
     }
@@ -1607,7 +1621,7 @@ mod tests {
         assert_eq!(ex("<div>A&am</p>p;B</div>", "div::text"), v(&["A&amp;B"]));
         assert_eq!(ex("<div>x&lt</p>;y</div>", "div::text"), v(&["x<;y"]));
         assert_eq!(
-            extract(b"<div>\xc3</p>\xa9</div>", &["div::text".to_string()], None).pop().unwrap(),
+            extract(b"<div>\xc3</p>\xa9</div>", &["div::text".to_string()], Some("utf-8"), None).pop().unwrap(),
             v(&["\u{fffd}\u{fffd}"]) // two replacement chars, NOT `é`
         );
     }
@@ -1878,7 +1892,7 @@ mod tests {
         let queries: Vec<String> = (0..66).map(|i| format!(".a{i} + .b{i}::text")).collect();
         let html = "<div><i class=\"a0\">.</i><i class=\"b0\">zero</i>\
                     <i class=\"a65\">.</i><i class=\"b65\">sixtyfive</i></div>";
-        let cols = extract(html.as_bytes(), &queries, None);
+        let cols = extract(html.as_bytes(), &queries, None, None);
         assert_eq!(cols.len(), 66);
         assert_eq!(cols[0], v(&["zero"])); // in-budget selector matches
         assert!(cols[65].is_empty()); // over-budget selector: deterministic empty, no aliasing
@@ -1899,7 +1913,7 @@ mod tests {
             let mut qs: Vec<String> = vec![".c::text".to_string(); normal];
             qs.extend(vec!["li:last-child::text".to_string(); reverse]);
             let (members, _) = budget_usage(&qs, &[]);
-            let cols = extract(html, &qs, None);
+            let cols = extract(html, &qs, None, None);
             let live = cols.iter().filter(|c| !c.is_empty()).count();
             assert!(
                 live <= matcher::MAX_MEMBERS,
@@ -1913,7 +1927,7 @@ mod tests {
             .into_iter()
             .chain(vec!["li:last-child::text".to_string(); 60])
             .collect();
-        let cols = extract(html, &qs, None);
+        let cols = extract(html, &qs, None, None);
         assert!(cols.iter().all(|c| !c.is_empty()), "in-budget schema lost a column");
     }
 
@@ -1922,7 +1936,7 @@ mod tests {
         // 130 flat members: columns 0..127 are live, 128/129 are over the 128-member budget (dead).
         let queries: Vec<String> = (0..130).map(|i| format!(".c{i}::text")).collect();
         let html = "<b class=\"c0\">first</b><b class=\"c129\">last</b>";
-        let cols = extract(html.as_bytes(), &queries, None);
+        let cols = extract(html.as_bytes(), &queries, None, None);
         assert_eq!(cols.len(), 130);
         assert_eq!(cols[0], v(&["first"])); // in-budget column matches
         assert!(cols[129].is_empty()); // over-128 column: deterministically empty
@@ -2026,12 +2040,12 @@ mod tests {
     fn encoding_legacy_and_sniff() {
         // windows-1252 (é = 0xE9), explicit label
         assert_eq!(
-            extract(b"<p class=\"c\">caf\xe9</p>", &["p::text"], Some("windows-1252"))[0],
+            extract(b"<p class=\"c\">caf\xe9</p>", &["p::text"], Some("windows-1252"), None)[0],
             v(&["café"])
         );
         // Shift_JIS (日本 = 0x93FA 0x967B), explicit label, in an attribute value too
         assert_eq!(
-            extract(b"<a title=\"\x93\xfa\x96\x7b\">x</a>", &["a::attr(title)"], Some("shift_jis"))[0],
+            extract(b"<a title=\"\x93\xfa\x96\x7b\">x</a>", &["a::attr(title)"], Some("shift_jis"), None)[0],
             v(&["日本"])
         );
         // <meta charset> sniff (no label)
@@ -2039,7 +2053,7 @@ mod tests {
             extract(
                 b"<html><head><meta charset=windows-1252></head><body><p>caf\xe9</p></body></html>",
                 &["p::text"],
-                None,
+                None, None,
             )[0],
             v(&["café"])
         );
@@ -2054,12 +2068,12 @@ mod tests {
         // windows-1252: `data-año` is `data-a\xf1o`, one byte where UTF-8 writes two
         let w1252 = b"<p data-a\xf1o=\"v\">t</p>";
         assert_eq!(
-            extract(w1252, &["[data-año]::text"], Some("windows-1252"))[0],
+            extract(w1252, &["[data-año]::text"], Some("windows-1252"), None)[0],
             v(&["t"])
         );
         // the predicate's VALUE and the `::attr()` terminal read the same materialized name
         assert_eq!(
-            extract(w1252, &["[data-año=\"v\"]::attr(data-año)"], Some("windows-1252"))[0],
+            extract(w1252, &["[data-año=\"v\"]::attr(data-año)"], Some("windows-1252"), None)[0],
             v(&["v"])
         );
         // shift_jis: a name whose bytes hold no ASCII at all
@@ -2067,7 +2081,7 @@ mod tests {
             extract(
                 "<p 属性=\"v\">t</p>".as_bytes(),
                 &["[属性]::text"],
-                Some("utf-8"),
+                Some("utf-8"), None,
             )[0],
             v(&["t"])
         );
@@ -2075,13 +2089,13 @@ mod tests {
             extract(
                 &encoding_rs::SHIFT_JIS.encode("<p 属性=\"v\">t</p>").0,
                 &["[属性]::text"],
-                Some("shift_jis"),
+                Some("shift_jis"), None,
             )[0],
             v(&["t"])
         );
         // a name the page spells in a DIFFERENT legacy encoding still must not match
         assert_eq!(
-            extract(w1252, &["[data-año]::text"], Some("shift_jis"))[0],
+            extract(w1252, &["[data-año]::text"], Some("shift_jis"), None)[0],
             v(&[])
         );
     }
@@ -2097,12 +2111,12 @@ mod tests {
         let body = b"<p>\x1b$B3t<02q<R\x1b(B</p><div>after</div>";
         assert!(body.windows(2).any(|w| w == b"<R"), "vector must contain the ambiguous pair");
         assert_eq!(
-            extract(body, &["p::text"], Some("iso-2022-jp"))[0],
+            extract(body, &["p::text"], Some("iso-2022-jp"), None)[0],
             v(&["株式会社"])
         );
         // and nothing downstream was reshaped by the phantom tag
         assert_eq!(
-            extract(body, &["div::text", "r::text"], Some("iso-2022-jp")),
+            extract(body, &["div::text", "r::text"], Some("iso-2022-jp"), None),
             vec![v(&["after"]), v(&[])]
         );
     }
@@ -2113,7 +2127,7 @@ mod tests {
             body.push(c as u8);
             body.push(0);
         }
-        assert_eq!(extract(&body, &["p::text"], None)[0], v(&["hi"]));
+        assert_eq!(extract(&body, &["p::text"], None, None)[0], v(&["hi"]));
     }
 
     /// Raw NUL is deleted from the WHOLE document before tokenizing, as Parsel/w3lib do. Dropping it
@@ -2148,8 +2162,8 @@ mod tests {
             body.push(c as u8);
             body.push(0);
         }
-        assert_eq!(extract(&body, &["div::text"], None)[0], v(&["hi"]));
-        assert_eq!(extract(&body, &["div#ab::text"], None)[0], v(&["hi"]));
+        assert_eq!(extract(&body, &["div::text"], None, None)[0], v(&["hi"]));
+        assert_eq!(extract(&body, &["div#ab::text"], None, None)[0], v(&["hi"]));
     }
 
     #[test]
@@ -2613,12 +2627,12 @@ mod tests {
         // libxml2 removes ONLY the leading document BOM; a U+FEFF inside a text node is real content
         // (encoding_rs' `decode` would strip it per-value — the bug this guards against).
         let lead = b"\xEF\xBB\xBF<p>x</p>"; // BOM at doc start -> dropped
-        assert_eq!(extract(lead, &["p::text"], None)[0], v(&["x"]));
+        assert_eq!(extract(lead, &["p::text"], None, None)[0], v(&["x"]));
         let mid = b"<p>\xEF\xBB\xBFx</p>"; // U+FEFF mid-text -> preserved
-        assert_eq!(extract(mid, &["p::text"], None)[0], v(&["\u{FEFF}x"]));
+        assert_eq!(extract(mid, &["p::text"], None, None)[0], v(&["\u{FEFF}x"]));
         // and in an attribute value
         let attr = "<a title=\"\u{FEFF}hi\">t</a>".as_bytes();
-        assert_eq!(extract(attr, &["a::attr(title)"], None)[0], v(&["\u{FEFF}hi"]));
+        assert_eq!(extract(attr, &["a::attr(title)"], None, None)[0], v(&["\u{FEFF}hi"]));
     }
     /// An INDENTED BOM still counts as the document BOM, because Parsel parses `text.strip()` — see
     /// [`document_bounds`]. What makes this worth a test rather than a footnote is the size of the
@@ -2632,18 +2646,18 @@ mod tests {
             .map(|s| s.to_string())
             .collect();
         let doc = b"  \t\n\xEF\xBB\xBF<!DOCTYPE HTML><html xmlns=\"x\"><head><title>T</title></head><body>b";
-        assert_eq!(extract(doc, &q, None), vec![v(&["T"]), v(&["x"]), v(&["b"])]);
+        assert_eq!(extract(doc, &q, None, None), vec![v(&["T"]), v(&["x"]), v(&["b"])]);
         // ...but only whitespace may precede it: after anything else the frame is already open, so the
         // U+FEFF is content — libxml2 keeps it and so does Parsel, whose strip cannot reach it.
         let after = b"z\xEF\xBB\xBF<!DOCTYPE HTML><html xmlns=\"x\"><head><title>T</title></head><body>b";
         assert_eq!(
-            extract(after, &q, None),
+            extract(after, &q, None, None),
             vec![v(&[]), v(&[]), v(&["z\u{FEFF}", "b"])]
         );
         // and a non-UTF-8 page decodes those three bytes as three characters, exactly as Parsel does
         let cp1252 = b"  \xEF\xBB\xBF<html><head><title>T</title></head><body>b";
         assert_eq!(
-            extract(cp1252, &q, Some("windows-1252"))[0],
+            extract(cp1252, &q, Some("windows-1252"), None)[0],
             v(&[]),
             "EF BB BF is not a BOM outside UTF-8"
         );
@@ -2692,12 +2706,12 @@ mod tests {
     #[test]
     fn trailing_whitespace_is_not_a_text_node() {
         let doc = b"<select><option>a<option class=c>\n\t ";
-        assert_eq!(extract(doc, &["option::text"], None)[0], v(&["a"]));
+        assert_eq!(extract(doc, &["option::text"], None, None)[0], v(&["a"]));
         // ...and a document that is nothing but whitespace has no content at all
-        assert_eq!(extract(b"  \n ", &["p::text"], None)[0], v(&[]));
+        assert_eq!(extract(b"  \n ", &["p::text"], None, None)[0], v(&[]));
         // non-whitespace at the end is untouched, trailing whitespace INSIDE it too
         let kept = b"<p>a </p>\n";
-        assert_eq!(extract(kept, &["p::text"], None)[0], v(&["a "]));
+        assert_eq!(extract(kept, &["p::text"], None, None)[0], v(&["a "]));
     }
 
     /// VERTICAL TAB is in Python's strip set and not in Rust's `is_ascii_whitespace`. Omitting it here
@@ -2709,16 +2723,16 @@ mod tests {
         let want = vec![v(&["T"]), v(&["1"])];
         let page = |lead: &str| format!("{lead}<html a=1><head><title>T</title></head><body><p>p</p>");
         for lead in ["\u{0b}", " \u{0b}\n", "\u{0c}"] {
-            assert_eq!(extract(page(lead).as_bytes(), &q, None), want, "lead {lead:?}");
+            assert_eq!(extract(page(lead).as_bytes(), &q, None, None), want, "lead {lead:?}");
             // ...in a single-byte encoding too: Parsel strips the DECODED text, so the label is
             // irrelevant to this half — only the BOM below is UTF-8-gated.
-            assert_eq!(extract(page(lead).as_bytes(), &q, Some("windows-1252")), want, "cp1252 {lead:?}");
+            assert_eq!(extract(page(lead).as_bytes(), &q, Some("windows-1252"), None), want, "cp1252 {lead:?}");
         }
         // stripping a vertical tab can expose the BOM, exactly as stripping a space can
-        assert_eq!(extract(page("\u{0b}\u{feff}").as_bytes(), &q, None), want);
+        assert_eq!(extract(page("\u{0b}\u{feff}").as_bytes(), &q, None, None), want);
         // trailing, the other end of the same strip: no text node for the last option
         let doc = b"<select><option>a<option class=c>\x0b";
-        assert_eq!(extract(doc, &["option::text"], None)[0], v(&["a"]));
+        assert_eq!(extract(doc, &["option::text"], None, None)[0], v(&["a"]));
         // ...but a vertical tab INSIDE the document is ordinary character data, not whitespace to
         // strip and not HTML whitespace either — it must survive in the value verbatim.
         assert_eq!(ex("<p>a\u{0b}b</p>", "p::text"), v(&["a\u{0b}b"]));
@@ -2730,7 +2744,7 @@ mod tests {
     #[test]
     fn nul_is_deleted_after_the_ends_are_trimmed() {
         // the NUL is the last byte, so it blocks the strip and the space before it survives
-        assert_eq!(extract(b"<option>x \x00", &["option::text"], None)[0], v(&["x "]));
+        assert_eq!(extract(b"<option>x \x00", &["option::text"], None, None)[0], v(&["x "]));
         // and here it blocks the strip that would otherwise promote the U+FEFF to offset 0, leaving it
         // a character — which opens the body, so the head is gone
         let doc = b"\x00 \xEF\xBB\xBF<html a=1><head><title>T</title></head><body><p>p</p>";
@@ -2738,10 +2752,10 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        assert_eq!(extract(doc, &q, None), vec![v(&[]), v(&[]), v(&["p"])]);
+        assert_eq!(extract(doc, &q, None, None), vec![v(&[]), v(&[]), v(&["p"])]);
         // without the NUL the same page strips down to the BOM and keeps its head
         let stripped = b" \xEF\xBB\xBF<html a=1><head><title>T</title></head><body><p>p</p>";
-        assert_eq!(extract(stripped, &q, None), vec![v(&["T"]), v(&["1"]), v(&["p"])]);
+        assert_eq!(extract(stripped, &q, None, None), vec![v(&["T"]), v(&["1"]), v(&["p"])]);
     }
     #[test]
     fn lt_not_a_tag_is_text() {

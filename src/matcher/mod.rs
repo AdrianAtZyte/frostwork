@@ -3154,10 +3154,10 @@ mod tail_merge_tests {
 
     /// Every column, against the same selector compiled ALONE — which is the unmerged answer.
     fn agrees_with_each_selector_alone(qs: &[String]) {
-        let merged = crate::extract(TAIL_PAGE, qs, None);
+        let merged = crate::extract(TAIL_PAGE, qs, None, None);
         for (col, q) in qs.iter().enumerate() {
             assert!(!merged[col].is_empty(), "{q} must have something to compare");
-            let alone = crate::extract(TAIL_PAGE, std::slice::from_ref(q), None);
+            let alone = crate::extract(TAIL_PAGE, std::slice::from_ref(q), None, None);
             assert_eq!(merged[col], alone[0], "{q}");
         }
     }
@@ -3212,7 +3212,7 @@ mod tail_merge_tests {
         let (live, dead) = (MAX_MEMBERS - 1, MAX_MEMBERS);
         let sch = schema(&qs);
         assert!(sch.flat_col_supported(live) && !sch.flat_col_supported(dead));
-        let cols = crate::extract(TAIL_PAGE, &qs, None);
+        let cols = crate::extract(TAIL_PAGE, &qs, None, None);
         assert_eq!(cols[live], ["/one", "/two"]);
         assert!(cols[dead].is_empty(), "an over-budget column stays empty");
     }

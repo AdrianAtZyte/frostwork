@@ -431,7 +431,7 @@ tree can come back empty here.
 
 | construct | Parsel / w3lib | Frostwork | gate |
 |---|---|---|---|
-| **sniffing a `<meta charset>` at all** | `parsel.Selector(body=…)` never looks: it defaults to UTF-8 and every value carries U+FFFD. Scrapy users get sniffing from w3lib, one layer up | BOM → BOM-less UTF-16 → caller label → a `<meta>` prescan bounded the way a BROWSER bounds it → UTF-8, with no caller label needed | `tools/enc_check.py` |
+| **sniffing a `<meta charset>` at all** | `parsel.Selector(body=…)` never looks: it defaults to UTF-8 and every value carries U+FFFD. Scrapy users get sniffing from w3lib, one layer up | BOM → BOM-less UTF-16 → caller label → a `<meta>` prescan bounded the way a BROWSER bounds it → autodetection, with no caller label needed | `tools/enc_check.py` |
 | a declaration **after `<body>`**, or **after an unsupported label** | w3lib's regex has a `\|body` alternative and gives up there, and it stops at its first hit rather than continuing past a label it cannot resolve | honoured — browsers do not stop at `<body>`, and WHATWG treats an unsupported label as "failure, continue" | the difference table under [Encoding](#deliberate-differences-from-w3lib), each row asserted in **both** directions so an upstream fix fails as stale |
 | a declaration **deep in the `<head>`** | ignored past 4096 bytes | honoured at any depth — measured in Chrome at 1KB/4KB/16KB/64KB/256KB **and 1MB**. A browser meeting the `<meta>` after its prescan budget runs "change the encoding" and re-decodes, so the budget is not a correctness cap. Legacy pages put `Content-Type` at byte ~1100–1600 behind a producer comment or a block of `og:` metas | `src/encoding.rs`; reasoning under [Encoding](#encoding) |
 | a **UTF-16 response body** | lxml's HTML parser cannot parse UTF-16 bytes at all — `Selector(body=…, encoding="utf-16")` returns `[]`/errors | decoded, matching the decode-first result Scrapy uses | `src/lib.rs::encoding_utf16_bom_transcode`, `src/encoding.rs::bomless_utf16_is_detected_from_the_xml_prefix` |
@@ -645,7 +645,11 @@ Resolution order (`src/encoding.rs`):
    head declarations real pages carry, and honoured body declarations no browser honours. Bounding at
    the head is also what makes this free — an unbounded scan measured a flat ~35µs per label-less page,
    one extra pass over the document, and the head bound gives all of it back.
-5. **UTF-8** default.
+5. **autodetection** — UTF-8 if the whole document is valid UTF-8 (a sequence cut off at the end
+   still counts), otherwise [chardetng](https://crates.io/crates/chardetng)'s guess, which is what
+   Firefox uses for this step. UTF-8 and ISO-2022-JP are excluded from its guesses, as in Firefox,
+   and the top-level domain of the response URL, when the caller passes one, weighs the guess as it
+   does there (`.jp` favours Shift_JIS, `.ru` windows-1251, …).
 
 Structural tokenization runs on raw bytes for every ASCII-compatible encoding — a byte below 0x80 *is*
 that ASCII character there, so the delimiters are unambiguous — and only the small emitted values are
@@ -683,7 +687,7 @@ gated in `tools/enc_check.py`.
 | behaviour | w3lib | Frostwork | why |
 |---|---|---|---|
 | a `<meta charset>` deep in the **head** | ignored past 4096 bytes | honoured at any depth (measured in Chrome to 1MB) | a browser meeting it after its prescan budget runs "change the encoding" and re-decodes; the budget is a *streaming* one |
-| a `<meta charset>` deep in the **body** | ignored (its regex gives up at `body`) | ignored too, past the first 1024 bytes | measured: Chrome honours a body declaration at byte 0/100/512 and ignores it from 1024 on — once real content is parsed it will not re-decode. The two agree here, for different reasons |
+| a `<meta charset>` deep in the **body** | ignored (its regex gives up at `body`) | ignored too, past the first 1024 bytes, so the page is autodetected | measured: Chrome honours a body declaration at byte 0/100/512 and ignores it from 1024 on — once real content is parsed it will not re-decode. The two agree here, for different reasons |
 | a `<meta charset>` after `<body>` | ignored (its regex has a `\|body` alternative and gives up there) | honoured | browsers do not stop at `<body>`, and real pages carry late declarations |
 | `charset=` inside a `<!-- comment -->` | honoured (no comment handling) | ignored | WHATWG's prescan and every browser skip comments |
 | an unsupported charset label | stops at the first regex hit, so a later valid declaration is lost | **continues** and takes the next valid one | WHATWG: an unsupported label is "failure, continue" |
@@ -692,6 +696,7 @@ gated in `tools/enc_check.py`.
 | `<meta charset=utf-16*>` | honoured; the whole document decodes as UTF-16 and Parsel then finds nothing | read as **UTF-8** | the prescan could only READ that declaration by treating the bytes as ASCII-compatible, so the declaration contradicts itself. A real UTF-16 document (BOM, prefix, or an HTTP label) is unaffected |
 | `<meta charset=x-user-defined>` | label not resolved at all → falls back to the default | **windows-1252** | "get an encoding from a meta element", step 5. Taken literally the label maps every high byte into the private use area (`caf\xe9` → `caf\u{f7e9}`) |
 | BOM-less UTF-16 | not detected | detected from the `<?` prefix (row 2 above) | libxml2 reads these files correctly, so this is parity with the *value* oracle as well as with browsers |
+| a non-UTF-8 document with **no declaration** | decoded as the default (UTF-8), unless the caller passes an `auto_detect_fun`, as Scrapy does | autodetected | WHATWG lets a user agent autodetect after the prescan, and browsers do |
 | `<?xml … encoding=…?>` **not** at offset 0 | honoured (regex search anywhere in the window) | ignored | a `<?` after the start of the document is a bogus comment to a browser and declares nothing |
 
 An XML declaration **at** offset 0 *is* honoured, by both, including its precedence over a later

@@ -299,13 +299,14 @@ fn meta_prescan(head: &[u8]) -> Option<&'static Encoding> {
 }
 
 /// BOM → BOM-less UTF-16 XML prefix → caller/HTTP label → `<meta>`/XML-declaration prescan (the whole
-/// document) → UTF-8. The intentional differences from w3lib (Scrapy's decoder) are in the encoding
-/// section of docs/COMPATIBILITY.md and gated in `tools/enc_check.py`; each one is a place where w3lib
-/// and browsers disagree and Frostwork follows the browser.
+/// document) → UTF-8 if the document is valid UTF-8, otherwise a guess from its bytes, informed by
+/// the top-level domain of `url` when given. The intentional differences from w3lib (Scrapy's decoder)
+/// are in the encoding section of docs/COMPATIBILITY.md and gated in `tools/enc_check.py`; each one is
+/// a place where w3lib and browsers disagree and Frostwork follows the browser.
 ///
 /// No UTF-32: the WHATWG Encoding Standard has no UTF-32, and neither does any browser, so a UTF-32 BOM
 /// is not a BOM here. w3lib does recognize it (its BOM table predates the standard).
-pub fn resolve(html: &[u8], override_label: Option<&str>) -> &'static Encoding {
+pub fn resolve(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> &'static Encoding {
     if html.starts_with(&[0xEF, 0xBB, 0xBF]) {
         return encoding_rs::UTF_8;
     }
@@ -348,7 +349,42 @@ pub fn resolve(html: &[u8], override_label: Option<&str>) -> &'static Encoding {
     if let Some(enc) = meta_prescan(html) {
         return enc;
     }
-    encoding_rs::UTF_8
+    autodetect(html, url.and_then(tld).as_deref())
+}
+
+/// WHATWG's optional frequency-analysis step, as Firefox runs it: chardetng, with UTF-8 decided up
+/// front by a strict decode, as Chrome and Scrapy do. A body cut off inside a UTF-8 sequence is still
+/// UTF-8.
+fn autodetect(html: &[u8], tld: Option<&[u8]>) -> &'static Encoding {
+    match std::str::from_utf8(html) {
+        Ok(_) => encoding_rs::UTF_8,
+        Err(e) if e.error_len().is_none() => encoding_rs::UTF_8,
+        Err(_) => {
+            let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Deny);
+            detector.feed(html, true);
+            detector.guess(tld, chardetng::Utf8Detection::Deny)
+        }
+    }
+}
+
+/// The last label of `url`'s host, lowercased, in the form chardetng accepts: ASCII without periods.
+/// An IP address or a non-ASCII host yields `None`, as does a string without a scheme.
+fn tld(url: &str) -> Option<Vec<u8>> {
+    let (_, rest) = url.split_once("://")?;
+    let authority = rest.split(['/', '\\', '?', '#']).next()?;
+    let host = authority.rsplit('@').next()?;
+    if host.starts_with('[') {
+        return None;
+    }
+    let host = host.split(':').next()?.trim_end_matches('.');
+    let label = host.rsplit('.').next()?;
+    if label.is_empty()
+        || !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        || label.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(label.to_ascii_lowercase().into_bytes())
 }
 
 #[cfg(test)]
@@ -379,7 +415,36 @@ mod tests {
     fn resolve_ignores_charset_in_comment() {
         // the T7 repro: comment banner must NOT switch the decode away from UTF-8
         let html = b"<!-- charset=big5 --><html><head></head><body><p>caf\xc3\xa9</p></body></html>";
-        assert_eq!(resolve(html, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(html, None, None), encoding_rs::UTF_8);
+    }
+
+    #[test]
+    fn the_tld_is_the_last_label_of_the_host() {
+        let t = |url| tld(url).map(|t| String::from_utf8(t).unwrap());
+        assert_eq!(t("https://www.Example.CO.JP/a.b?c.d#e.f"), Some("jp".into()));
+        assert_eq!(t("http://user:pw@example.ru:8080"), Some("ru".into()));
+        assert_eq!(t("http://example.de./"), Some("de".into()));
+        assert_eq!(t("http://xn--p1ai\\path"), Some("xn--p1ai".into()));
+        assert_eq!(t("http://127.0.0.1/"), None);
+        assert_eq!(t("http://[::1]:80/"), None);
+        assert_eq!(t("http://пример.рф/"), None);
+        assert_eq!(t("example.jp"), None);
+        assert_eq!(t("http:///path"), None);
+    }
+
+    #[test]
+    fn an_undeclared_document_is_autodetected() {
+        assert_eq!(resolve("<p>café</p>".as_bytes(), None, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(b"<p>caf\xc3", None, None), encoding_rs::UTF_8); // truncated mid-character
+        let french = b"<p>Le caf\xe9 est d\xe9j\xe0 pr\xeat, tr\xe8s chaud et tr\xe8s bon.</p>";
+        assert_eq!(resolve(french, None, None), encoding_rs::WINDOWS_1252);
+        let (japanese, _, _) = encoding_rs::SHIFT_JIS.encode("<p>日本語のページです。こんにちは、世界。</p>");
+        assert_eq!(resolve(&japanese, None, None), encoding_rs::SHIFT_JIS);
+        // too short to tell apart without the hint
+        assert_eq!(resolve(b"<p>\x82\xa0</p>", None, None), encoding_rs::IBM866);
+        assert_eq!(resolve(b"<p>\x82\xa0</p>", None, Some("https://example.jp/")), encoding_rs::SHIFT_JIS);
+        // a declaration still wins over the guess
+        assert_eq!(resolve(&[b"<meta charset=utf-8>", &japanese[..]].concat(), None, None), encoding_rs::UTF_8);
     }
 }
 
@@ -471,7 +536,7 @@ mod w3lib_oracle_tests {
         assert_eq!(scan(b"<?xml version='1.0' encoding='x-user-defined'?>"),
                    Some(encoding_rs::WINDOWS_1252));
         // an explicit HTTP/caller label is NOT a meta declaration, so it keeps its literal meaning
-        assert_eq!(resolve(b"<p>x</p>", Some("x-user-defined")), encoding_rs::X_USER_DEFINED);
+        assert_eq!(resolve(b"<p>x</p>", Some("x-user-defined"), None), encoding_rs::X_USER_DEFINED);
     }
 
     /// An unknown label declares nothing and the scan CONTINUES (w3lib stops at its first regex hit).
@@ -494,12 +559,12 @@ mod w3lib_oracle_tests {
         let be: Vec<u8> = r#"<?xml version="1.0"?><p>x</p>"#.encode_utf16()
             .flat_map(|u| u.to_be_bytes())
             .collect();
-        assert_eq!(resolve(&le, None), encoding_rs::UTF_16LE);
-        assert_eq!(resolve(&be, None), encoding_rs::UTF_16BE);
+        assert_eq!(resolve(&le, None, None), encoding_rs::UTF_16LE);
+        assert_eq!(resolve(&be, None, None), encoding_rs::UTF_16BE);
         // bytes-don't-lie: the sniff sits with the BOM checks, so it outranks a wrong caller label
-        assert_eq!(resolve(&le, Some("windows-1252")), encoding_rs::UTF_16LE);
+        assert_eq!(resolve(&le, Some("windows-1252"), None), encoding_rs::UTF_16LE);
         // an ordinary ASCII-compatible document is untouched by it
-        assert_eq!(resolve(br#"<?xml version="1.0"?><p>x</p>"#, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(br#"<?xml version="1.0"?><p>x</p>"#, None, None), encoding_rs::UTF_8);
     }
 
     /// The `iso-8859-1` LABEL means windows-1252, wherever it arrives from — including an explicit
@@ -513,12 +578,12 @@ mod w3lib_oracle_tests {
     /// Scrapy, and mojibake under raw Parsel.
     #[test]
     fn the_iso_8859_1_label_is_windows_1252() {
-        assert_eq!(resolve(b"<p>x</p>", Some("iso-8859-1")), encoding_rs::WINDOWS_1252);
-        assert_eq!(resolve(b"<p>x</p>", Some("latin1")), encoding_rs::WINDOWS_1252);
-        assert_eq!(resolve(b"<p>x</p>", Some("ISO_8859-1:1987")), encoding_rs::WINDOWS_1252);
+        assert_eq!(resolve(b"<p>x</p>", Some("iso-8859-1"), None), encoding_rs::WINDOWS_1252);
+        assert_eq!(resolve(b"<p>x</p>", Some("latin1"), None), encoding_rs::WINDOWS_1252);
+        assert_eq!(resolve(b"<p>x</p>", Some("ISO_8859-1:1987"), None), encoding_rs::WINDOWS_1252);
         // so the C1 bytes are the printable windows-1252 characters, not controls:
         // 0x96 is an en dash, not U+0096
-        let (text, _, _) = resolve(b"", Some("iso-8859-1")).decode(b"Milano\x96Malpensa");
+        let (text, _, _) = resolve(b"", Some("iso-8859-1"), None).decode(b"Milano\x96Malpensa");
         assert_eq!(text, "Milano\u{2013}Malpensa");
     }
 
@@ -544,21 +609,21 @@ mod w3lib_oracle_tests {
         let mut late = pad(1100);
         late.extend_from_slice(decl);
         assert!(late.iter().position(|&b| b == b'C').unwrap() > 1024);
-        assert_eq!(resolve(&late, None), encoding_rs::WINDOWS_1252);
+        assert_eq!(resolve(&late, None, None), encoding_rs::WINDOWS_1252);
 
         // ...and past every depth a bounded window would cut off. These depths were measured in Chrome.
         for depth in [3900usize, 4200, 16 * 1024, 64 * 1024, 256 * 1024, 1024 * 1024] {
             let mut deep = pad(depth);
             deep.extend_from_slice(decl);
             assert_eq!(
-                resolve(&deep, None),
+                resolve(&deep, None, None),
                 encoding_rs::WINDOWS_1252,
                 "a HEAD declaration at depth {depth} must still be a declaration"
             );
         }
 
         // an explicit caller/HTTP label still outranks any prescan, near or far
-        assert_eq!(resolve(&late, Some("big5")), encoding_rs::BIG5);
+        assert_eq!(resolve(&late, Some("big5"), None), encoding_rs::BIG5);
     }
 
     /// An inline `<script>`/`<style>` in the head holds TEXT, not markup: the `<div>` in
@@ -586,7 +651,7 @@ mod w3lib_oracle_tests {
             &b"<script>var s = '</scr' + 'ipt><p>';</script>"[..],
         ] {
             assert_eq!(
-                resolve(&far(inner), None),
+                resolve(&far(inner), None, None),
                 encoding_rs::WINDOWS_1252,
                 "raw-text content must not end the head: {:?}",
                 std::str::from_utf8(inner).unwrap()
@@ -596,7 +661,7 @@ mod w3lib_oracle_tests {
         // what a browser does too
         let mut unclosed = b"<html><head><script>x".to_vec();
         unclosed.extend_from_slice(decl);
-        assert_eq!(resolve(&unclosed, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(&unclosed, None, None), encoding_rs::UTF_8);
     }
 
     /// The other half: once the BODY has started, a declaration past the 1024-byte floor is ignored,
@@ -614,14 +679,14 @@ mod w3lib_oracle_tests {
         };
         for near in [0usize, 100, 512] {
             assert_eq!(
-                resolve(&page(near), None),
+                resolve(&page(near), None, None),
                 encoding_rs::WINDOWS_1252,
                 "a BODY declaration at {near} is inside the floor and is honoured"
             );
         }
         for far in [1024usize, 2048, 4096, 64 * 1024] {
             assert_eq!(
-                resolve(&page(far), None),
+                resolve(&page(far), None, None),
                 encoding_rs::UTF_8,
                 "a BODY declaration at {far} is past the floor and declares nothing"
             );
@@ -632,12 +697,12 @@ mod w3lib_oracle_tests {
     /// look-alike, survive a truncated tail, and skip an arbitrary number of comments on the way.
     #[test]
     fn the_unbounded_scan_matches_only_real_meta_tags() {
-        assert_eq!(resolve(b"<p><META charset=big5>", None), encoding_rs::BIG5);
-        assert_eq!(resolve(b"<p><MeTa charset=big5>", None), encoding_rs::BIG5);
-        assert_eq!(resolve(b"<metadata charset=big5>", None), encoding_rs::UTF_8);
-        assert_eq!(resolve(b"<p><div><met", None), encoding_rs::UTF_8); // truncated tail
+        assert_eq!(resolve(b"<p><META charset=big5>", None, None), encoding_rs::BIG5);
+        assert_eq!(resolve(b"<p><MeTa charset=big5>", None, None), encoding_rs::BIG5);
+        assert_eq!(resolve(b"<metadata charset=big5>", None, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(b"<p><div><met", None, None), encoding_rs::UTF_8); // truncated tail
         assert_eq!(
-            resolve(b"<html><head><title>x</title><meta charset=big5>", None),
+            resolve(b"<html><head><title>x</title><meta charset=big5>", None, None),
             encoding_rs::BIG5
         );
         // Many comments, each holding a decoy: none declares anything, and the real one after them is
@@ -648,7 +713,7 @@ mod w3lib_oracle_tests {
             many.extend_from_slice(b"<!-- <meta charset=shift_jis> --><link rel=x>");
         }
         many.extend_from_slice(b"<meta charset=big5>");
-        assert_eq!(resolve(&many, None), encoding_rs::BIG5);
+        assert_eq!(resolve(&many, None, None), encoding_rs::BIG5);
 
         // ...and the same shape with BODY content in it stops at the floor instead, because the
         // first `<p>` ends the head.
@@ -657,7 +722,7 @@ mod w3lib_oracle_tests {
             body.extend_from_slice(b"<!-- <meta charset=shift_jis> --><p>x</p>");
         }
         body.extend_from_slice(b"<meta charset=big5>");
-        assert_eq!(resolve(&body, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(&body, None, None), encoding_rs::UTF_8);
     }
 
     /// The WHATWG Encoding Standard has no UTF-32, so a UTF-32 BOM is not a BOM. w3lib recognizes one.
@@ -666,9 +731,10 @@ mod w3lib_oracle_tests {
         // UTF-32LE begins FF FE 00 00 — the first two bytes ARE the UTF-16LE BOM, and per the standard
         // that is what it means, so such a document is read as UTF-16LE (browsers do the same).
         let le32: Vec<u8> = [0xFFu8, 0xFE, 0x00, 0x00].into_iter().collect();
-        assert_eq!(resolve(&le32, None), encoding_rs::UTF_16LE);
-        // UTF-32BE begins 00 00 FE FF, which is no BOM at all -> the ordinary prescan/UTF-8 path
+        assert_eq!(resolve(&le32, None, None), encoding_rs::UTF_16LE);
+        // UTF-32BE begins 00 00 FE FF, which is no BOM at all -> the ordinary prescan/autodetect path
         let be32: Vec<u8> = [0x00u8, 0x00, 0xFE, 0xFF].into_iter().collect();
-        assert_eq!(resolve(&be32, None), encoding_rs::UTF_8);
+        assert_eq!(resolve(&be32, None, None), autodetect(&be32, None));
     }
 }
+

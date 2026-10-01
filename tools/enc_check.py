@@ -208,6 +208,11 @@ BROWSER_DIFFERENCES = [
      ["café"], ["cafÃ©"],
      "w3lib's regex searches for `<?xml … encoding=…` anywhere in its window; a `<?` after the start of "
      "the document is a bogus comment to a browser and declares nothing"),
+    ("an undeclared document is autodetected",
+     b"<html><head></head><body>" + W1252 + b"</body></html>", ["café"], ["caf�"],
+     "WHATWG lets a user agent autodetect after the prescan, and Firefox does it with chardetng, which is "
+     "what Frostwork runs whenever the document is not valid UTF-8. w3lib only autodetects when given an "
+     "auto_detect_fun; Scrapy passes one, and its guess agrees here"),
     ("a UTF-32 BOM is not a BOM",
      _U32LE, ["café"], ["café"],
      "the WHATWG Encoding Standard has no UTF-32, so the leading FF FE IS the UTF-16LE BOM and the "
@@ -238,22 +243,21 @@ for name, doc, want_mine, want_w3, why in BROWSER_DIFFERENCES:
 # re-decode. Getting this half wrong is invisible to the head cases — an unbounded scan passes every
 # one of them while honouring body declarations no browser honours.
 #
-# Frostwork and w3lib AGREE on the ignored cases, for different reasons (w3lib's regex gives up at
-# `body`; Frostwork bounds the re-decode at the head). Asserted directly rather than as a w3lib
-# difference, since the agreement is a coincidence of two different rules and w3lib is not the target.
+# The declaration names koi8-r so that an ignored one is visible: the undeclared page is then
+# autodetected as windows-1252, as a browser autodetects it, and `caf\xe9` reads `café`, not `cafИ`.
 def _body_meta_page(pad):
     doc = b"<!DOCTYPE html><html><head><title>t</title></head><body>"
     while len(doc) < pad:
         doc += b"<p>lorem ipsum dolor sit amet consectetur</p>"
-    return doc + b'<meta charset="windows-1252">' + W1252 + b"</body></html>"
+    return doc + b'<meta charset="koi8-r">' + W1252 + b"</body></html>"
 
 
-for _pad, _want, _why in [(0, ["café"], "inside the 1024-byte floor"),
-                          (100, ["café"], "inside the floor"),
-                          (512, ["café"], "inside the floor"),
-                          (1024, ["caf�"], "past the floor, in the body"),
-                          (4096, ["caf�"], "past the floor, in the body"),
-                          (64 * 1024, ["caf�"], "past the floor, in the body")]:
+for _pad, _want, _why in [(0, ["cafИ"], "inside the 1024-byte floor"),
+                          (100, ["cafИ"], "inside the floor"),
+                          (512, ["cafИ"], "inside the floor"),
+                          (1024, ["café"], "past the floor, in the body"),
+                          (4096, ["café"], "past the floor, in the body"),
+                          (64 * 1024, ["café"], "past the floor, in the body")]:
     _mine = engine(_body_meta_page(_pad), ["p.c::text"], None)[0]
     _ok = _mine == _want
     if not _ok:

@@ -2885,6 +2885,18 @@ def test_detect_encoding_reports_what_extract_will_use():
     assert frostwork.extract(b, ["p::text"])[0] == ["café"]
 
 
+def test_url_informs_autodetection():
+    body = b"<p>\x82\xa0</p>"  # too short to tell Shift_JIS from IBM866 without the hint
+    url = "https://example.jp/"
+    assert frostwork.detect_encoding(body) == "IBM866"
+    assert frostwork.detect_encoding(body, url=url) == "Shift_JIS"
+    assert frostwork.extract(body, ["p::text"], url=url) == [["あ"]]
+    assert frostwork.extract_grouped(body, [], [("p", [("t", "::text")])], url=url)[1] == [[[["あ"]]]]
+    assert frostwork.Page().field("t", "p::text").extract(body, url=url).to_dict() == {"t": "あ"}
+    assert frostwork.Page().many("ps", "p", {"t": "::text"}).extract(body, url=url).to_dict() == {
+        "ps": [{"t": "あ"}]}
+
+
 def test_single_valued_page_stops_scanning_without_changing_the_item():
     # EARLY EXIT: a Page whose fields are all single-valued may stop as soon as each has a value. The
     # observable contract is that the ITEM is unchanged — the values dropped are the ones a
