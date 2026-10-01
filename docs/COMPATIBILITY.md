@@ -491,7 +491,7 @@ bucket, not this list, is where the next bug will be:
   open element (`<p><b><div>`); a known gap that leaves the un-reshaped nesting (never worse).
 - **Head-only elements in `<body>`** (`<title>` in body, etc.).
 - **Encoding sniffing differs from w3lib in a few named places, all of them deliberate.** The policy is
-  browser/WHATWG correctness rather than w3lib parity — `<body>`, comments, an invalid label, UTF-32,
+  browser/WHATWG correctness rather than w3lib parity — `<body>`, comment closers, an invalid label, UTF-32,
   `utf-16`/`x-user-defined` declarations, BOM-less UTF-16, and where an XML declaration counts. They are
   tabulated with their reasons under [Encoding](#encoding) below rather than repeated here, and each is
   asserted (both ways) by `tools/enc_check.py`.
@@ -689,7 +689,8 @@ gated in `tools/enc_check.py`.
 | a `<meta charset>` deep in the **head** | ignored past 4096 bytes | honoured at any depth (measured in Chrome to 1MB) | a browser meeting it after its prescan budget runs "change the encoding" and re-decodes; the budget is a *streaming* one |
 | a `<meta charset>` deep in the **body** | ignored (its regex gives up at `body`) | ignored too, past the first 1024 bytes, so the page is autodetected | measured: Chrome honours a body declaration at byte 0/100/512 and ignores it from 1024 on — once real content is parsed it will not re-decode. The two agree here, for different reasons |
 | a `<meta charset>` after `<body>` | ignored (its regex has a `\|body` alternative and gives up there) | honoured | browsers do not stop at `<body>`, and real pages carry late declarations |
-| `charset=` inside a `<!-- comment -->` | honoured (no comment handling) | ignored | WHATWG's prescan and every browser skip comments |
+| a `<meta charset>` after `<!-->` | ignored (the comment runs on until a `-->`) | honoured | WHATWG's prescan ends a comment at the first `>` preceded by `--` after the `<`, and the `--` of `<!--` counts, so `<!-->` is a whole comment |
+| a `<meta charset>` after a comment closed by `--!>` | ignored (only `-->` ends a comment) | honoured | the HTML tokenizer ends a comment at `--!>`; WHATWG's prescan algorithm does not. Not yet measured in a browser |
 | an unsupported charset label | stops at the first regex hit, so a later valid declaration is lost | **continues** and takes the next valid one | WHATWG: an unsupported label is "failure, continue" |
 | a stray quote in an unquoted charset value (`charset=big5"`) | stops at the quote and honours `big5` | treats the quote as part of the invalid label, then continues | an unquoted HTML attribute ends only at whitespace or `>`; html5lib and browsers agree |
 | UTF-32 BOM | recognized | **not a BOM** | the WHATWG Encoding Standard has no UTF-32. A UTF-32LE document begins `FF FE 00 00`, whose first two bytes *are* the UTF-16LE BOM, so it is read as UTF-16LE — which, with NUL deletion, still yields the BMP text |

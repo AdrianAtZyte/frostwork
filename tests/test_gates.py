@@ -213,9 +213,7 @@ def test_meta_prescan_matches_w3lib():
     produced mojibake. Scrapy picks a response encoding with `w3lib.encoding.html_to_unicode`, so that is
     what a prescan has to match.
 
-    ONE deliberate divergence, per the project's oracle-bug policy: w3lib has no comment handling and so
-    honours `<!-- <meta charset=big5> -->`, contrary to WHATWG's prescan and every browser. We skip
-    comments and document the difference rather than reproduce the bug (see COMPATIBILITY.md).
+    Where w3lib and browsers disagree, `tools/enc_check.py` asserts the difference instead.
     """
     frostwork = pytest.importorskip("frostwork")
     html_to_unicode = pytest.importorskip("w3lib.encoding").html_to_unicode
@@ -229,8 +227,7 @@ def test_meta_prescan_matches_w3lib():
         (b'<meta http-equiv="content-type" content="text/html" data-note="charset=big5">', U8),
         (b'<meta http-equiv="content-type" content="text/html; charset=windows-1252" title="a>b">', W1252),
         (b"<meta charset\n=\nwindows-1252>", W1252),
-        (b"<!--><meta charset=windows-1252>", W1252),
-        (b"<!--x--!><meta charset=windows-1252>", W1252),
+        (b"<!-- <meta charset=big5> -->", U8),
         (b'<meta content="text/html; charset=big5">', U8),
         (b'<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">', W1252),
         (b"<meta charset=utf-8>", U8),
@@ -241,23 +238,6 @@ def test_meta_prescan_matches_w3lib():
         want = parsel.Selector(text=txt).css("p.c::text").getall()
         got = frostwork.extract(doc, ["p.c::text"], strict=False)[0]
         assert got == want, f"prescan disagrees with w3lib for {head!r}"
-
-
-def test_commented_charset_is_a_documented_divergence_from_w3lib():
-    """Pin the one deliberate difference so it cannot drift silently in either direction."""
-    frostwork = pytest.importorskip("frostwork")
-    html_to_unicode = pytest.importorskip("w3lib.encoding").html_to_unicode
-    parsel = pytest.importorskip("parsel")
-
-    doc = (b"<html><head><!-- <meta charset=big5> --></head>"
-           b'<body><p class="c">caf\xc3\xa9</p></body></html>')
-    _, txt = html_to_unicode(None, doc, auto_detect_fun=None, default_encoding="utf8")
-    w3lib_says = parsel.Selector(text=txt).css("p.c::text").getall()
-    # don't hardcode the mojibake: the point is only that w3lib DID honour the commented declaration
-    assert w3lib_says != ["café"], \
-        "w3lib no longer honours a commented charset — drop our documented divergence"
-    # we follow WHATWG/browsers: a declaration inside a comment declares nothing
-    assert frostwork.extract(doc, ["p.c::text"], strict=False)[0] == ["café"]
 
 
 def test_the_browser_difference_list_is_two_sided():

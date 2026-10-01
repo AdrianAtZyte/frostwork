@@ -98,8 +98,7 @@ SHARED_PRESCAN_CASES = [
     ("charset= in an unrelated attribute", b'<meta http-equiv="content-type" content="text/html" data-note="charset=big5">', U8),
     ("quoted > does not end the tag", b'<meta http-equiv="content-type" content="text/html; charset=windows-1252" title="a>b">', W1252),
     ("whitespace around =", b"<meta charset\n=\nwindows-1252>", W1252),
-    ("abrupt comment close <!-->", b"<!--><meta charset=windows-1252>", W1252),
-    ("comment-end-bang --!>", b"<!--x--!><meta charset=windows-1252>", W1252),
+    ("charset inside a comment declares nothing", b"<!-- <meta charset=big5> -->", U8),
     ("content= without http-equiv", b'<meta content="text/html; charset=big5">', U8),
     ("http-equiv content-type", b'<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">', W1252),
     ("bare charset attribute", b"<meta charset=utf-8>", U8),
@@ -165,10 +164,17 @@ BROWSER_DIFFERENCES = [
      "<meta charset> after it runs 'change the encoding' and re-decodes what it already has. Measured "
      "in Chrome at 1KB/4KB/16KB/64KB/256KB/1MB — honoured at every one, so in the head there is no "
      "bound to match. The BODY half of the rule is the opposite and is gated separately below"),
-    ("charset inside a COMMENT is ignored",
-     b"<html><head><!-- <meta charset=big5> --></head><body>" + U8 + b"</body></html>",
-     ["café"], ["caf矇"],
-     "w3lib has no comment handling; WHATWG's prescan and every browser skip comments"),
+    ("<!--> is a whole comment",
+     b"<html><head><!--><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
+     ["café"], ["caf�"],
+     "WHATWG's prescan ends a comment at the first `>` preceded by `--` and after the `<`, and the "
+     "`--` of `<!--` counts, so the <meta> after `<!-->` declares; w3lib looks for a `-->` after the "
+     "`<!--` and so treats the rest of the document as a comment"),
+    ("--!> ends a comment",
+     b"<html><head><!--x--!><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
+     ["café"], ["caf�"],
+     "the HTML tokenizer ends a comment at `--!>`, and so does Frostwork's prescan; WHATWG's prescan "
+     "algorithm and w3lib only end one at `-->`. Not yet measured in a browser"),
     ("the prescan does NOT stop at <body>",
      b'<html><head></head><body><meta charset="windows-1252">' + W1252 + b"</body></html>",
      ["café"], ["caf�"],
