@@ -22,9 +22,9 @@ const BASKET: &[&str] = &[
 fuzz_target!(|data: &[u8]| {
     let queries: Vec<String> = BASKET.iter().map(|s| (*s).to_string()).collect();
     // flat, sniffed encoding (exercises the BOM / <meta> prescan path on arbitrary bytes)
-    let _ = frostwork::extract(data, &queries, None);
+    let _ = frostwork::extract(data, &queries, None, None);
     // flat, an explicit legacy label (exercises the transcode-value path)
-    let _ = frostwork::extract(data, &queries, Some("windows-1252"));
+    let _ = frostwork::extract(data, &queries, Some("windows-1252"), None);
     // grouped One/Many: containers + multi-part / void subs over the same bytes
     let g = frostwork::GroupQuery {
         container: ".card".to_string(),
@@ -34,5 +34,5 @@ fuzz_target!(|data: &[u8]| {
             ("h".to_string(), ".//a/@href".to_string()),
         ],
     };
-    let _ = frostwork::extract_grouped(data, &queries, std::slice::from_ref(&g), None);
+    let _ = frostwork::extract_grouped(data, &queries, std::slice::from_ref(&g), None, None);
 });

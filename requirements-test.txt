@@ -1,6 +1,7 @@
 # Reproducible correctness oracle and local/CI test toolchain.
 # Bump parsel+lxml+cssselect together and rerun the full differential soak deliberately.
 parsel==1.11.0
+w3lib==2.5.0
 lxml==6.1.1
 cssselect==1.5.0
 maturin==1.14.1

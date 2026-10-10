@@ -108,7 +108,7 @@ fn main() {
             }
             let html = hex_decode(hex);
             let enc = if enc_label.is_empty() { None } else { Some(enc_label) };
-            let (_flat, grouped) = frostwork::extract_grouped(&html, &[], &groups, enc);
+            let (_flat, grouped) = frostwork::extract_grouped(&html, &[], &groups, enc, None);
             // [ group0_rows, group1_rows, ... ]  where group_rows = [ [ [values]*sub ]*row ]
             out.push('[');
             for (gi, rows) in grouped.iter().enumerate() {
@@ -157,7 +157,7 @@ fn main() {
                 }
                 budget_ok.push(sels.clone());
             }
-            let res = frostwork::extract(&html, &sels, enc);
+            let res = frostwork::extract(&html, &sels, enc, None);
             out.push('[');
             for (i, col) in res.iter().enumerate() {
                 if i > 0 {

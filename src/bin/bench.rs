@@ -65,12 +65,12 @@ fn main() {
     let plan = frostwork::Plan::compile_first_only(flat_queries, &groups, &first_only);
     let warmup = 200.min(iters.max(1));
     for _ in 0..warmup {
-        let _ = plan.extract(&html, None);
+        let _ = plan.extract(&html, None, None);
     }
     let t = Instant::now();
     let mut nvals = 0usize;
     for _ in 0..iters {
-        let (flat, grouped) = plan.extract(&html, None);
+        let (flat, grouped) = plan.extract(&html, None, None);
         nvals += count(&flat, &grouped);
     }
     let el = t.elapsed().as_secs_f64();
