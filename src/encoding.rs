@@ -355,8 +355,11 @@ pub fn resolve(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> 
 /// WHATWG's optional frequency-analysis step, as Firefox runs it: chardetng, with UTF-8 decided up
 /// front by a strict decode, as Chrome and Scrapy do. A body cut off inside a UTF-8 sequence is still
 /// UTF-8.
+///
+/// The decode is `simdutf8::compat`, which returns what `std::str::from_utf8` does. Not `basic`: it
+/// reads the whole document before failing and has no `error_len()` to tell a truncated tail apart.
 fn autodetect(html: &[u8], tld: Option<&[u8]>) -> &'static Encoding {
-    match std::str::from_utf8(html) {
+    match simdutf8::compat::from_utf8(html) {
         Ok(_) => encoding_rs::UTF_8,
         Err(e) if e.error_len().is_none() => encoding_rs::UTF_8,
         Err(_) => {
@@ -445,6 +448,10 @@ mod tests {
         assert_eq!(resolve(b"<p>\x82\xa0</p>", None, Some("https://example.jp/")), encoding_rs::SHIFT_JIS);
         // a declaration still wins over the guess
         assert_eq!(resolve(&[b"<meta charset=utf-8>", &japanese[..]].concat(), None, None), encoding_rs::UTF_8);
+        // the same two answers past the first SIMD block: a truncated tail is UTF-8, a bad byte is not
+        let long = "<p>café €</p>".repeat(40).into_bytes();
+        assert_eq!(resolve(&[&long[..], b"\xe2\x82"].concat(), None, None), encoding_rs::UTF_8);
+        assert_ne!(resolve(&[&long[..], b"\xe9t\xe9</p>"].concat(), None, None), encoding_rs::UTF_8);
     }
 }
 
