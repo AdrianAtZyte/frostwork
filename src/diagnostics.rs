@@ -118,6 +118,12 @@ fn css_reason(qt: &str, syntax: Syntax) -> String {
     if members.len() > 1 {
         return comma_group_reason(&members, syntax);
     }
+    // An unsupported pseudo refuses the selector whatever else it holds, and the shape probes below
+    // would match the supported pseudo next to it (`li:nth-child(2):hover`).
+    if let Some(p) = unsupported_pseudo(qt) {
+        let kind = if p.starts_with("::") { "pseudo-element" } else { "pseudo-class" };
+        return format!("{kind} `{p}` is unsupported; supported terminals are `::text` and `::attr(name)`");
+    }
     let lower = qt.to_ascii_lowercase();
     let msg = if lower.contains(":has(") {
         ":has() is supported on ONE compound of a lone selector, as a relative selector LIST whose \
@@ -165,9 +171,6 @@ fn css_reason(qt: &str, syntax: Syntax) -> String {
          (`:not(.x)`) and a compound LIST (`:not(.x, .y)`) are both fine"
     } else if has_namespace_prefix(qt) {
         "namespace prefix (`ns|tag`) is unsupported"
-    } else if let Some(p) = unsupported_pseudo(qt) {
-        let kind = if p.starts_with("::") { "pseudo-element" } else { "pseudo-class" };
-        return format!("{kind} `{p}` is unsupported; supported terminals are `::text` and `::attr(name)`");
     } else {
         "invalid or unsupported CSS selector for the Frostwork subset (tag/`*`, `.class`, `#id`, \
          `[attr]`/`[attr=v]`, descendant/`>`/`+`/`~`, `::text`/`::attr(name)`)"
@@ -455,6 +458,15 @@ mod tests {
             .starts_with("pseudo-class `:checked` "));
         assert!(reason(".md\\:flex:hover", Syntax::Auto).starts_with("pseudo-class `:hover` "));
         assert!(!reason("a[title=\":\"] b c d e f g h", Syntax::Auto).contains("pseudo"));
+        for q in [
+            "li:nth-child(2):hover::text",
+            "div:has(a):hover::text",
+            "li:is(.a, .b):hover::text",
+            "p:contains(\"x\"):hover::text",
+            "li:last-child:hover::text",
+        ] {
+            assert!(reason(q, Syntax::Auto).starts_with("pseudo-class `:hover` "), "{q}");
+        }
     }
 
     /// The three mechanisms that empty a comma group are named separately, and the leading clause stays
