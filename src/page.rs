@@ -159,16 +159,17 @@ impl Page {
     }
 
     /// Fill an [`Item`] from `html` in one streaming pass, sniffing the encoding
-    /// (BOM → `<meta>` → UTF-8). One-shot; to reuse the schema across pages, [`compile`](Page::compile).
+    /// (BOM → `<meta>` → autodetection). One-shot; to reuse the schema across pages, [`compile`](Page::compile).
     pub fn extract(&self, html: &[u8]) -> Item {
-        self.extract_with_encoding(html, None)
+        self.extract_with_encoding(html, None, None)
     }
 
     /// Like [`extract`](Page::extract), but with an explicit caller/HTTP charset label (as Scrapy
-    /// passes from the `Content-Type` header); `None` sniffs. See [`crate::extract`].
-    pub fn extract_with_encoding(&self, html: &[u8], encoding: Option<&str>) -> Item {
+    /// passes from the `Content-Type` header), or `None` to sniff, and the response `url`. See
+    /// [`crate::extract`].
+    pub fn extract_with_encoding(&self, html: &[u8], encoding: Option<&str>, url: Option<&str>) -> Item {
         let plan = self.plan.get_or_init(|| self.compile_plan());
-        let cols = plan.extract(html, encoding).0;
+        let cols = plan.extract(html, encoding, url).0;
         Item { names: self.names.clone(), cards: self.cards.clone(), cols }
     }
 }
@@ -183,15 +184,16 @@ pub struct CompiledPage {
 }
 
 impl CompiledPage {
-    /// Fill an [`Item`] from `html` in one streaming pass, sniffing the encoding (BOM → `<meta>` → UTF-8).
+    /// Fill an [`Item`] from `html` in one streaming pass, sniffing the encoding (BOM → `<meta>` → autodetection).
     pub fn extract(&self, html: &[u8]) -> Item {
-        self.extract_with_encoding(html, None)
+        self.extract_with_encoding(html, None, None)
     }
 
-    /// Like [`extract`](CompiledPage::extract), with an explicit charset label; `None` sniffs.
-    pub fn extract_with_encoding(&self, html: &[u8], encoding: Option<&str>) -> Item {
+    /// Like [`extract`](CompiledPage::extract), with an explicit charset label, or `None` to sniff,
+    /// and the response `url`.
+    pub fn extract_with_encoding(&self, html: &[u8], encoding: Option<&str>, url: Option<&str>) -> Item {
         // Columns come back aligned with the plan's queries, i.e. with our fields.
-        let cols = self.plan.extract(html, encoding).0;
+        let cols = self.plan.extract(html, encoding, url).0;
         Item {
             names: self.names.clone(),
             cards: self.cards.clone(),
@@ -528,7 +530,7 @@ mod tests {
     fn explicit_encoding_label() {
         // windows-1252 é = 0xE9, passed as a label the way Scrapy would from Content-Type
         let page = Page::new().field("p", "p::text");
-        let item = page.extract_with_encoding(b"<p class=c>caf\xe9</p>", Some("windows-1252"));
+        let item = page.extract_with_encoding(b"<p class=c>caf\xe9</p>", Some("windows-1252"), None);
         assert_eq!(item.get("p"), Some("café"));
     }
 
@@ -567,7 +569,7 @@ mod tests {
 
         // ...and the values are what a FULL scan's cardinality reduction gives, which is the whole
         // contract: `extract` still sees the tail, and its first values are the same two.
-        let cols = crate::extract(&doc, &["title::text", "link::attr(href)"], None);
+        let cols = crate::extract(&doc, &["title::text", "link::attr(href)"], None, None);
         assert_eq!(cols[0].first().map(String::as_str), item.get("t"));
         assert_eq!(cols[1].first().map(String::as_str), item.get("c"));
         assert_eq!(cols[0].len(), 2, "extract itself is never armed — it must still see the tail");
@@ -616,7 +618,7 @@ mod tests {
         let nested = b"<div class=card id=out><div class=card id=in>I</div>tail</div><p>after</p>";
         let got = page.extract(nested);
         // the full scan's first-by-start value is the OUTER card, with its real end tag
-        let full = crate::extract(nested, &["div.card".to_string()], None);
+        let full = crate::extract(nested, &["div.card".to_string()], None, None);
         assert_eq!(got.get("c"), full[0].first().map(String::as_str));
         assert_eq!(
             got.get("c"),
@@ -627,7 +629,7 @@ mod tests {
         // deeper nesting, and a second field so the mask needs more than the capture
         let two = Page::new().field("c", "div.card").field("t", "p::text");
         let doc = b"<div class=card id=a><div class=card id=b><div class=card id=c>x</div></div></div><p>P</p><p>Q</p>";
-        let full = crate::extract(doc, &["div.card".to_string(), "p::text".to_string()], None);
+        let full = crate::extract(doc, &["div.card".to_string(), "p::text".to_string()], None, None);
         let item = two.extract(doc);
         assert_eq!(item.get("c"), full[0].first().map(String::as_str));
         assert_eq!(item.get("t"), full[1].first().map(String::as_str));

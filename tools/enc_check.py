@@ -98,8 +98,9 @@ SHARED_PRESCAN_CASES = [
     ("charset= in an unrelated attribute", b'<meta http-equiv="content-type" content="text/html" data-note="charset=big5">', U8),
     ("quoted > does not end the tag", b'<meta http-equiv="content-type" content="text/html; charset=windows-1252" title="a>b">', W1252),
     ("whitespace around =", b"<meta charset\n=\nwindows-1252>", W1252),
-    ("abrupt comment close <!-->", b"<!--><meta charset=windows-1252>", W1252),
-    ("comment-end-bang --!>", b"<!--x--!><meta charset=windows-1252>", W1252),
+    ("charset inside a comment declares nothing", b"<!-- <meta charset=big5> -->", U8),
+    ("<!--!> does not close a comment", b"<!--!><meta charset=big5>-->", U8),
+    ("<!---!> does not close a comment", b"<!---!><meta charset=big5>-->", U8),
     ("content= without http-equiv", b'<meta content="text/html; charset=big5">', U8),
     ("http-equiv content-type", b'<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">', W1252),
     ("bare charset attribute", b"<meta charset=utf-8>", U8),
@@ -165,10 +166,18 @@ BROWSER_DIFFERENCES = [
      "<meta charset> after it runs 'change the encoding' and re-decodes what it already has. Measured "
      "in Chrome at 1KB/4KB/16KB/64KB/256KB/1MB — honoured at every one, so in the head there is no "
      "bound to match. The BODY half of the rule is the opposite and is gated separately below"),
-    ("charset inside a COMMENT is ignored",
-     b"<html><head><!-- <meta charset=big5> --></head><body>" + U8 + b"</body></html>",
-     ["café"], ["caf矇"],
-     "w3lib has no comment handling; WHATWG's prescan and every browser skip comments"),
+    ("<!--> is a whole comment",
+     b"<html><head><!--><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
+     ["café"], ["caf�"],
+     "WHATWG's prescan ends a comment at the first `>` preceded by `--` and after the `<`, and the "
+     "`--` of `<!--` counts, so the <meta> after `<!-->` declares, as it does in Chromium 153 and Firefox "
+     "144; w3lib looks for a `-->` after the `<!--` and so treats the rest of the document as a comment"),
+    ("--!> ends a comment",
+     b"<html><head><!--x--!><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
+     ["café"], ["caf�"],
+     "the HTML tokenizer ends a comment at `--!>`, and the <meta> after it declares in Chromium 153 and "
+     "Firefox 144, served as text/html with no charset; WHATWG's prescan algorithm and w3lib only end a "
+     "comment at `-->`"),
     ("the prescan does NOT stop at <body>",
      b'<html><head></head><body><meta charset="windows-1252">' + W1252 + b"</body></html>",
      ["café"], ["caf�"],
@@ -208,6 +217,11 @@ BROWSER_DIFFERENCES = [
      ["café"], ["cafÃ©"],
      "w3lib's regex searches for `<?xml … encoding=…` anywhere in its window; a `<?` after the start of "
      "the document is a bogus comment to a browser and declares nothing"),
+    ("an undeclared document is autodetected",
+     b"<html><head></head><body>" + W1252 + b"</body></html>", ["café"], ["caf�"],
+     "WHATWG lets a user agent autodetect after the prescan, and Firefox does it with chardetng, which is "
+     "what Frostwork runs whenever the document is not valid UTF-8. w3lib only autodetects when given an "
+     "auto_detect_fun; Scrapy passes one, and its guess agrees here"),
     ("a UTF-32 BOM is not a BOM",
      _U32LE, ["café"], ["café"],
      "the WHATWG Encoding Standard has no UTF-32, so the leading FF FE IS the UTF-16LE BOM and the "
@@ -238,22 +252,21 @@ for name, doc, want_mine, want_w3, why in BROWSER_DIFFERENCES:
 # re-decode. Getting this half wrong is invisible to the head cases — an unbounded scan passes every
 # one of them while honouring body declarations no browser honours.
 #
-# Frostwork and w3lib AGREE on the ignored cases, for different reasons (w3lib's regex gives up at
-# `body`; Frostwork bounds the re-decode at the head). Asserted directly rather than as a w3lib
-# difference, since the agreement is a coincidence of two different rules and w3lib is not the target.
+# The declaration names koi8-r so that an ignored one is visible: the undeclared page is then
+# autodetected as windows-1252, as a browser autodetects it, and `caf\xe9` reads `café`, not `cafИ`.
 def _body_meta_page(pad):
     doc = b"<!DOCTYPE html><html><head><title>t</title></head><body>"
     while len(doc) < pad:
         doc += b"<p>lorem ipsum dolor sit amet consectetur</p>"
-    return doc + b'<meta charset="windows-1252">' + W1252 + b"</body></html>"
+    return doc + b'<meta charset="koi8-r">' + W1252 + b"</body></html>"
 
 
-for _pad, _want, _why in [(0, ["café"], "inside the 1024-byte floor"),
-                          (100, ["café"], "inside the floor"),
-                          (512, ["café"], "inside the floor"),
-                          (1024, ["caf�"], "past the floor, in the body"),
-                          (4096, ["caf�"], "past the floor, in the body"),
-                          (64 * 1024, ["caf�"], "past the floor, in the body")]:
+for _pad, _want, _why in [(0, ["cafИ"], "inside the 1024-byte floor"),
+                          (100, ["cafИ"], "inside the floor"),
+                          (512, ["cafИ"], "inside the floor"),
+                          (1024, ["café"], "past the floor, in the body"),
+                          (4096, ["café"], "past the floor, in the body"),
+                          (64 * 1024, ["café"], "past the floor, in the body")]:
     _mine = engine(_body_meta_page(_pad), ["p.c::text"], None)[0]
     _ok = _mine == _want
     if not _ok:
