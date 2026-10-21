@@ -61,13 +61,17 @@ def detect_encoding(
     html: Union[bytes, str], encoding: Optional[str] = ..., *, url: Optional[str] = ...
 ) -> str:
     """The encoding ``extract`` would scan this document with, as a WHATWG name: BOM → BOM-less UTF-16
-    prefix → ``encoding`` label → 4096-byte ``<meta>``/XML-declaration prescan → UTF-8 if valid, else
+    prefix → ``encoding`` label → ``<meta>``/XML-declaration prescan of the head → UTF-8 if valid, else
     autodetected, informed by the top-level domain of ``url``. A ``str`` is already-decoded text, so
     the answer is ``"UTF-8"`` without sniffing."""
 
-def bom_encoding(body: bytes) -> Optional[Tuple[str, int]]: ...
-def declared_encoding(body: bytes) -> Optional[str]: ...
-def autodetect_encoding(body: bytes, *, url: Optional[str] = ...) -> str: ...
+def bom_encoding(body: bytes) -> Optional[Tuple[str, int]]:
+    """``(encoding, bom_length)`` from the start of ``body``, or ``None``."""
+def declared_encoding(body: bytes) -> Optional[str]:
+    """The encoding the ``<meta>``/XML-declaration prescan finds, or ``None``."""
+def autodetect_encoding(body: bytes, *, url: Optional[str] = ...) -> str:
+    """``"UTF-8"`` if ``body`` is valid UTF-8, else a guess informed by the top-level domain of
+    ``url``."""
 def detect(body: bytes, label: Optional[str] = ..., *, url: Optional[str] = ...) -> Tuple[str, int]:
     """``(encoding, bom_length)``; ``label`` must be a WHATWG label."""
 def decode(body: bytes, label: str) -> str:

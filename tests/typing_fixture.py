@@ -14,13 +14,15 @@ from typing import Any, Dict, List, Optional, Tuple
 import attrs
 from typing_extensions import assert_type
 
+# Deliberate errors: `frostwork` exports its names lazily, and if a type checker ever read them as `Any`,
+# these ignores would go unused and fail the check.
 from frostwork import Pgae  # type: ignore[attr-defined]
 from frostwork import extract_grouped, resolve_label
 from frostwork.webpoet import FrostBrowserPage, FrostFields, FrostPage, Many, One, field
 
 
 assert_type(extract_grouped(b'', [], [('article', {'title': './h2/text()'})]), Tuple[List[List[str]], list])
-resolve_label(b'utf-8')  # type: ignore[arg-type]
+resolve_label(b'utf-8')  # type: ignore[arg-type]  # deliberate, see the imports
 
 
 @attrs.define

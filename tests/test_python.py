@@ -215,6 +215,11 @@ def test_resolve_label_is_public():
     assert frostwork.resolve_label("cp437") is None
 
 
+def test_page_resolve_label_is_deprecated():
+    with pytest.warns(DeprecationWarning, match=r"frostwork\.resolve_label\(\)"):
+        assert frostwork.page.resolve_label("cp874") == "windows-874"
+
+
 def test_every_python_text_codec_is_a_whatwg_encoding_or_declared_not_one():
     """The universe the label table is asked about is Python's whole codec set, not the names someone
     thought of. A codec not resolved here is either a WHATWG encoding missing from

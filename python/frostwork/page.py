@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import codecs
 import json
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field as _dc_field
 from functools import lru_cache
@@ -176,7 +177,7 @@ def _validate_grouped(
 def detect_encoding(html: Bytesish, encoding: Optional[str] = None, *, url: Optional[str] = None) -> str:
     """The encoding :func:`extract` would scan ``html`` with, as a WHATWG name (``"windows-1252"``).
 
-    BOM → BOM-less UTF-16 prefix → ``encoding`` label → 4096-byte ``<meta>``/XML-declaration prescan →
+    BOM → BOM-less UTF-16 prefix → ``encoding`` label → ``<meta>``/XML-declaration prescan of the head →
     UTF-8 if valid, else autodetected, informed by the top-level domain of *url*. Exposed on its own because nothing else in a scraper's stack answers this the way a browser
     does: ``parsel.Selector(body=…)`` never sniffs (it defaults to UTF-8), and w3lib — what Scrapy
     uses — stops at ``<body>`` and at the first declaration it cannot resolve. See the Encoding section
@@ -188,6 +189,15 @@ def detect_encoding(html: Bytesish, encoding: Optional[str] = None, *, url: Opti
     the question this answers is "what will be used", not "is this input acceptable".
     """
     return _detect_encoding(_as_scan_input(html), encoding, url=url)
+
+
+def resolve_label(label: str) -> Optional[str]:
+    warnings.warn(
+        "frostwork.page.resolve_label() is deprecated, use frostwork.resolve_label() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return _resolve_label(label)
 
 
 def extract(
