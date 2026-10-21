@@ -1,4 +1,5 @@
 import codecs
+import io
 import os
 import subprocess
 import sys
@@ -123,6 +124,23 @@ def test_replacement_codec():
         b"abc".decode("replacement")
     assert "café".encode("replacement") == "café".encode()
 
+
+
+def test_the_codecs_stream():
+    body = bytes(range(256))
+    text = decode(body, "x-user-defined")
+    assert io.TextIOWrapper(io.BytesIO(body), encoding="x-user-defined", newline="").read() == text
+    assert "".join(codecs.iterdecode([body[:100], body[100:]], "x-user-defined")) == text
+    assert b"".join(codecs.iterencode([text[:100], text[100:]], "x-user-defined")) == body
+    stream = io.BytesIO()
+    codecs.getwriter("x-user-defined")(stream).write(text)
+    assert stream.getvalue() == body
+
+    chunks = [b"", b"a", b"bc"]
+    assert "".join(codecs.iterdecode(chunks, "replacement", "replace")) == "\ufffd"
+    assert io.TextIOWrapper(io.BytesIO(b"abc"), encoding="replacement", errors="replace").read() == "\ufffd"
+    assert codecs.getreader("replacement")(io.BytesIO(b"abc"), "replace").read() == "\ufffd"
+    assert b"".join(codecs.iterencode(["caf", "é"], "replacement")) == "café".encode()
 
 def test_bom_encoding():
     assert bom_encoding(b"\xef\xbb\xbfx") == ("UTF-8", 3)

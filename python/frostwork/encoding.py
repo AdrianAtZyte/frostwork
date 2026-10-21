@@ -52,14 +52,16 @@ _CODEC_NAMES = {
 }
 
 
-@lru_cache(maxsize=256)
+_cached_resolve_label = lru_cache(maxsize=256)(_resolve_label)
+
+
 def resolve_label(label: str) -> Optional[str]:
     """The WHATWG name of the encoding charset *label* names (``"cp874"`` → ``"windows-874"``), or
     ``None`` if it names none (``"cp437"``).
 
     *label* can be a WHATWG label or a Python codec name, e.g. Scrapy's ``response.encoding``.
     """
-    return _resolve_label(label)
+    return _cached_resolve_label(label)
 
 
 def codec_name(label: str) -> Optional[str]:
@@ -68,7 +70,8 @@ def codec_name(label: str) -> Optional[str]:
 
     Where a Python codec decodes differently from the WHATWG decoder, as with ``euc_jp``, the name
     still identifies the WHATWG encoding to every function here and to :func:`frostwork.extract`; use
-    :func:`decode` to decode with it.
+    :func:`decode` to decode with it. The name of ``ISO-8859-8-I`` resolves back to ``ISO-8859-8``,
+    which decodes the same.
     """
     name = resolve_label(label)
     return None if name is None else _CODEC_NAMES[name]
@@ -107,16 +110,16 @@ def autodetect_encoding(body: bytes, *, url: Optional[str] = None) -> str:
     return _autodetect_encoding(body, url=url)
 
 
-def decode(body: bytes, encoding: str) -> str:
-    """*body* decoded with the WHATWG decoder of *encoding*, a WHATWG label or a Python codec name,
+def decode(body: bytes, label: str) -> str:
+    """*body* decoded with the WHATWG decoder of *label*, a WHATWG label or a Python codec name,
     replacing invalid input with U+FFFD.
 
     A BOM is decoded like any other bytes; strip the length :func:`detect` returns first. Raises
-    :exc:`LookupError` if :func:`resolve_label` cannot resolve *encoding*.
+    :exc:`LookupError` if :func:`resolve_label` cannot resolve *label*.
     """
-    name = resolve_label(encoding)
+    name = resolve_label(label)
     if name is None:
-        raise LookupError(f"unknown encoding: {encoding}")
+        raise LookupError(f"unknown encoding: {label}")
     if name == "UTF-8":
         # Python's UTF-8 decoder replaces invalid input as WHATWG's does, and builds the str directly.
         return body.decode("utf-8", "replace")
@@ -167,10 +170,93 @@ def _replacement_decode(data: Buffer, errors: str = "strict", /) -> Tuple[str, i
     return cast(str, text), len(data)
 
 
+class _XUserDefinedIncrementalEncoder(codecs.IncrementalEncoder):
+    def encode(self, input: str, final: bool = False) -> bytes:
+        return _x_user_defined_encode(input, self.errors)[0]
+
+
+class _XUserDefinedIncrementalDecoder(codecs.IncrementalDecoder):
+    def decode(self, input: Buffer, final: bool = False) -> str:
+        return _x_user_defined_decode(input, self.errors)[0]
+
+
+class _XUserDefinedStreamWriter(codecs.StreamWriter):
+    def encode(self, input: str, errors: str = "strict") -> Tuple[bytes, int]:
+        return _x_user_defined_encode(input, errors)
+
+
+class _XUserDefinedStreamReader(codecs.StreamReader):
+    def decode(self, input: Buffer, errors: str = "strict") -> Tuple[str, int]:
+        return _x_user_defined_decode(input, errors)
+
+
+class _ReplacementIncrementalEncoder(codecs.IncrementalEncoder):
+    def encode(self, input: str, final: bool = False) -> bytes:
+        return _replacement_encode(input, self.errors)[0]
+
+
+class _ReplacementIncrementalDecoder(codecs.IncrementalDecoder):
+    """Decodes the first non-empty input into one error and everything after it into nothing."""
+
+    def __init__(self, errors: str = "strict") -> None:
+        super().__init__(errors)
+        self._started = False
+
+    def decode(self, input: Buffer, final: bool = False) -> str:
+        if self._started:
+            return ""
+        text, consumed = _replacement_decode(input, self.errors)
+        self._started = consumed > 0
+        return text
+
+    def reset(self) -> None:
+        self._started = False
+
+    def getstate(self) -> Tuple[bytes, int]:
+        return b"", int(self._started)
+
+    def setstate(self, state: Tuple[bytes, int]) -> None:
+        self._started = bool(state[1])
+
+
+class _ReplacementStreamWriter(codecs.StreamWriter):
+    def encode(self, input: str, errors: str = "strict") -> Tuple[bytes, int]:
+        return _replacement_encode(input, errors)
+
+
+class _ReplacementStreamReader(codecs.StreamReader):
+    _started = False
+
+    def decode(self, input: Buffer, errors: str = "strict") -> Tuple[str, int]:
+        if self._started:
+            return "", len(bytes(input))
+        text, consumed = _replacement_decode(input, errors)
+        self._started = consumed > 0
+        return text, consumed
+
+    def reset(self) -> None:
+        super().reset()
+        self._started = False
+
+
 _CODECS = {
     "x_user_defined": codecs.CodecInfo(
-        _x_user_defined_encode, _x_user_defined_decode, name="x-user-defined"
+        _x_user_defined_encode,
+        _x_user_defined_decode,
+        _XUserDefinedStreamReader,
+        _XUserDefinedStreamWriter,
+        _XUserDefinedIncrementalEncoder,
+        _XUserDefinedIncrementalDecoder,
+        name="x-user-defined",
     ),
-    "replacement": codecs.CodecInfo(_replacement_encode, _replacement_decode, name="replacement"),
+    "replacement": codecs.CodecInfo(
+        _replacement_encode,
+        _replacement_decode,
+        _ReplacementStreamReader,
+        _ReplacementStreamWriter,
+        _ReplacementIncrementalEncoder,
+        _ReplacementIncrementalDecoder,
+        name="replacement",
+    ),
 }
 codecs.register(lambda name: _CODECS.get(encodings.normalize_encoding(name)))

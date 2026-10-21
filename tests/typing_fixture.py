@@ -7,16 +7,19 @@ are a promise, and only a type checker can hold them: annotating `field()` as th
 makes correct code an error in the user's CI while every runtime test here passes.
 """
 
+# mypy: warn-unused-ignores
+
 from typing import Any, Dict, List, Optional, Tuple
 
 import attrs
 from typing_extensions import assert_type
 
-from frostwork import extract_grouped
+from frostwork import extract_grouped, resolve_label
 from frostwork.webpoet import FrostBrowserPage, FrostFields, FrostPage, Many, One, field
 
 
 assert_type(extract_grouped(b'', [], [('article', {'title': './h2/text()'})]), Tuple[List[List[str]], list])
+resolve_label(b'utf-8')  # type: ignore[arg-type]
 
 
 @attrs.define
