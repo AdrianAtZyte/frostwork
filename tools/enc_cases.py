@@ -59,7 +59,8 @@ BROWSER_DIFFERENCES = [
      "WHATWG's 1024 is a STREAMING budget ('not to stall beyond that'), and a browser that meets the "
      "<meta charset> after it runs 'change the encoding' and re-decodes what it already has. Measured "
      "in Chrome at 1KB/4KB/16KB/64KB/256KB/1MB — honoured at every one, so in the head there is no "
-     "bound to match. The BODY half of the rule is the opposite and is gated separately below"),
+     "bound to match. The BODY half of the rule is the opposite and is gated separately in "
+     "tools/enc_check.py"),
     ("<!--> is a whole comment",
      b"<html><head><!--><meta charset=windows-1252></head><body>" + W1252 + b"</body></html>",
      ["café"], ["caf�"],

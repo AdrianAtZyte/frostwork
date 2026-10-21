@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn autodetection_reads_the_whole_document() {
-        // Firefox 144 reports windows-1251 for this page: the 36 000 Shift_JIS bytes at the start do not
+        // Firefox 144 reports windows-1251 for this page: the 46 000 Shift_JIS bytes at the start do not
         // decide the guess.
         let japanese = "<p>日本語のページです。こんにちは、世界。</p>\n".repeat(1000);
         let russian = "<p>Привет мир, это страница.</p>\n".repeat(10_000);

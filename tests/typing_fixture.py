@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import attrs
 from typing_extensions import assert_type
 
+from frostwork import Pgae  # type: ignore[attr-defined]
 from frostwork import extract_grouped, resolve_label
 from frostwork.webpoet import FrostBrowserPage, FrostFields, FrostPage, Many, One, field
 

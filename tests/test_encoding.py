@@ -33,7 +33,7 @@ DOCUMENTS = [
 
 
 def _steps(body, label=None, url=None):
-    """`frostwork.detect_encoding`, composed from the steps the way w3lib composes them."""
+    """`frostwork.detect_encoding`, composed from the steps the way w3lib would compose them."""
     bom = bom_encoding(body)
     if bom is not None:
         return bom
@@ -88,6 +88,17 @@ def test_decode(label, body, text):
 @pytest.mark.parametrize("buffer", [bytearray, memoryview])
 def test_decode_accepts_any_buffer(label, buffer):
     assert decode(buffer(b"caf\xe9"), label) == decode(b"caf\xe9", label)
+
+
+@pytest.mark.parametrize("buffer", [bytearray, memoryview])
+def test_the_steps_accept_any_buffer(buffer):
+    body = b"\xef\xbb\xbf<meta charset=gbk><p>caf\xe9"
+    assert detect(buffer(body), "cp1252") == detect(body, "cp1252")
+    assert bom_encoding(buffer(body)) == bom_encoding(body)
+    assert declared_encoding(buffer(body)) == declared_encoding(body)
+    assert autodetect_encoding(buffer(body), url="https://example.jp/") == autodetect_encoding(
+        body, url="https://example.jp/"
+    )
 
 
 def test_decode_refuses_an_unknown_label():

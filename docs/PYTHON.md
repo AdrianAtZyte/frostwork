@@ -109,7 +109,7 @@ assert codec_name("Shift_JIS") == "cp932"
 ```
 
 Every step returns a WHATWG name, and `codec_name()` gives the Python codec name for any label.
-Importing the module, which the first use of `frostwork.resolve_label()` also does, registers the two
+Importing the module, which the first access to `frostwork.resolve_label` also does, registers the two
 Python codecs it can return that Python lacks, `x-user-defined` and `replacement`, so those names work
 with `str.encode()` and `bytes.decode()`, and everything built on them, such as w3lib's
 `resolve_encoding()` and `to_unicode()`, in the whole process.

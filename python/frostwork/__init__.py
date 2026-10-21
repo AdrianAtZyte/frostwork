@@ -10,10 +10,9 @@ the ``frostwork[webpoet]`` extra).
 """
 
 from importlib import import_module as _import_module
-from typing import TYPE_CHECKING as _TYPE_CHECKING
-from typing import Any as _Any
+import typing as _typing
 
-if _TYPE_CHECKING:
+if _typing.TYPE_CHECKING:
     from .encoding import resolve_label
     from .page import (
         FieldReport,
@@ -53,24 +52,26 @@ _EXPORTS = {
 __all__ = [*_EXPORTS, "__version__"]
 
 
-def __getattr__(name: str) -> _Any:
-    value: _Any
-    if name == "__version__":
-        try:
-            from importlib.metadata import version
+# Hidden from type checkers, which would otherwise read any misspelled name as `Any`.
+if not _typing.TYPE_CHECKING:
 
-            value = version("frostwork")
-        except Exception:  # pragma: no cover - source tree without installed metadata
-            value = "0.0.0+unknown"
-    elif name in _EXPORTS:
-        value = getattr(_import_module(f".{_EXPORTS[name]}", __name__), name)
-    elif name in {"page", "validation"}:
-        value = _import_module(f".{name}", __name__)
-    else:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    globals()[name] = value
-    return value
+    def __getattr__(name: str) -> _typing.Any:
+        value: _typing.Any
+        if name == "__version__":
+            try:
+                from importlib.metadata import version
 
+                value = version("frostwork")
+            except Exception:  # pragma: no cover - source tree without installed metadata
+                value = "0.0.0+unknown"
+        elif name in _EXPORTS:
+            value = getattr(_import_module(f".{_EXPORTS[name]}", __name__), name)
+        elif name in {"page", "validation"}:
+            value = _import_module(f".{name}", __name__)
+        else:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        globals()[name] = value
+        return value
 
-def __dir__() -> list[str]:
-    return sorted({*globals(), *__all__})
+    def __dir__() -> list[str]:
+        return sorted({*globals(), *__all__})

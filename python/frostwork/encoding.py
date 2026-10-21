@@ -81,37 +81,37 @@ def codec_name(label: str) -> Optional[str]:
     return None if name is None else _CODEC_NAMES[name]
 
 
-def detect(body: bytes, label: Optional[str] = None, *, url: Optional[str] = None) -> Tuple[str, int]:
+def detect(body: Buffer, label: Optional[str] = None, *, url: Optional[str] = None) -> Tuple[str, int]:
     """The encoding of *body* and the length of the BOM at its start, 0 if none.
 
     The encoding is the first answer of :func:`bom_encoding`, *label*, :func:`declared_encoding` and
     :func:`autodetect_encoding`, in that order, as in :func:`frostwork.detect_encoding`.
     """
-    return _detect(body, None if label is None else resolve_label(label), url=url)
+    return _detect(bytes(body), None if label is None else resolve_label(label), url=url)
 
 
-def bom_encoding(body: bytes) -> Optional[Tuple[str, int]]:
+def bom_encoding(body: Buffer) -> Optional[Tuple[str, int]]:
     """The encoding the byte order mark at the start of *body* names, and the length of that BOM.
 
     A UTF-16 document that starts with an XML declaration and no BOM is recognized too, with length
     0. A UTF-32 BOM is not a BOM, as in browsers.
     """
-    return _bom_encoding(body)
+    return _bom_encoding(bytes(body))
 
 
-def declared_encoding(body: bytes) -> Optional[str]:
+def declared_encoding(body: Buffer) -> Optional[str]:
     """The encoding a ``<meta>`` tag or an XML declaration in *body* declares, as a browser finds it.
 
     A declaration of a UTF-16 encoding gives ``"UTF-8"``, and of ``x-user-defined``,
     ``"windows-1252"``.
     """
-    return _declared_encoding(body)
+    return _declared_encoding(bytes(body))
 
 
-def autodetect_encoding(body: bytes, *, url: Optional[str] = None) -> str:
+def autodetect_encoding(body: Buffer, *, url: Optional[str] = None) -> str:
     """``"UTF-8"`` if *body* is valid UTF-8, else the encoding guessed from its bytes and from the
     top-level domain of *url*, like Firefox does for a page that declares none."""
-    return _autodetect_encoding(body, url=url)
+    return _autodetect_encoding(bytes(body), url=url)
 
 
 def decode(body: Buffer, label: str) -> str:
