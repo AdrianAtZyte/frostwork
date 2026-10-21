@@ -227,7 +227,7 @@ fn start_tag_name(head: &[u8], lt: usize) -> Option<&[u8]> {
 /// A flat byte window is wrong in both directions: it would drop late head declarations and honour late
 /// body declarations no browser does. It also costs ~35µs on every label-less page, a whole extra pass
 /// over the document, which stopping at the real head boundary does not.
-pub fn meta_prescan(head: &[u8]) -> Option<&'static Encoding> {
+pub(crate) fn meta_prescan(head: &[u8]) -> Option<&'static Encoding> {
     if let Some(enc) = xml_decl_encoding(head) {
         return enc.into();
     }
@@ -308,7 +308,7 @@ pub fn resolve(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> 
 }
 
 /// [`resolve`], with the length of the BOM the encoding came from, 0 if none (see [`bom`]).
-pub fn decide(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> (&'static Encoding, usize) {
+pub(crate) fn decide(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> (&'static Encoding, usize) {
     if let Some(found) = bom(html) {
         return found;
     }
@@ -340,7 +340,7 @@ pub fn decide(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> (
 ///
 /// No UTF-32: the WHATWG Encoding Standard has no UTF-32, and neither does any browser, so a UTF-32 BOM
 /// is not a BOM here. w3lib does recognize it (its BOM table predates the standard).
-pub fn bom(html: &[u8]) -> Option<(&'static Encoding, usize)> {
+pub(crate) fn bom(html: &[u8]) -> Option<(&'static Encoding, usize)> {
     if html.starts_with(&[0xEF, 0xBB, 0xBF]) {
         return Some((encoding_rs::UTF_8, 3));
     }
@@ -370,7 +370,7 @@ pub fn bom(html: &[u8]) -> Option<(&'static Encoding, usize)> {
 ///
 /// The decode is `simdutf8::compat`, which returns what `std::str::from_utf8` does. Not `basic`: it
 /// reads the whole document before failing and has no `error_len()` to tell a truncated tail apart.
-pub fn autodetect(html: &[u8], url: Option<&str>) -> &'static Encoding {
+pub(crate) fn autodetect(html: &[u8], url: Option<&str>) -> &'static Encoding {
     match simdutf8::compat::from_utf8(html) {
         Ok(_) => encoding_rs::UTF_8,
         Err(e) if e.error_len().is_none() => encoding_rs::UTF_8,

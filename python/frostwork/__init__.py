@@ -53,6 +53,7 @@ __all__ = [*_EXPORTS, "__version__"]
 
 
 def __getattr__(name: str) -> Any:
+    value: Any
     if name == "__version__":
         try:
             from importlib.metadata import version
@@ -62,6 +63,8 @@ def __getattr__(name: str) -> Any:
             value = "0.0.0+unknown"
     elif name in _EXPORTS:
         value = getattr(import_module(f".{_EXPORTS[name]}", __name__), name)
+    elif name in {"page", "validation"}:
+        value = import_module(f".{name}", __name__)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     globals()[name] = value

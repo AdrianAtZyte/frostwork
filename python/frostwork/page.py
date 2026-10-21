@@ -35,7 +35,7 @@ from ._frostwork import audit_schema as _audit_schema
 from ._frostwork import detect_encoding as _detect_encoding
 from ._frostwork import extract as _extract
 from ._frostwork import extract_grouped as _extract_grouped
-from .encoding import resolve_label
+from ._frostwork import resolve_label as _resolve_label
 
 __all__ = [
     "extract", "extract_grouped", "check", "detect_encoding", "Page", "Item",
@@ -129,7 +129,7 @@ def _check_encoding(html: Bytesish, encoding: Optional[str]) -> Optional[str]:
     """
     if encoding is None:
         return None
-    canonical = resolve_label(encoding)
+    canonical = _resolve_label(encoding)
     if canonical is None:
         try:
             codecs.lookup(encoding)

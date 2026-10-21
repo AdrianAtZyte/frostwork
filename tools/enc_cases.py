@@ -45,8 +45,8 @@ SHARED_DOC_CASES = [
 
 # Each row is (name, document, what Frostwork must produce, what w3lib produces, why we differ). The
 # "what w3lib produces" column is checked too: if w3lib ever starts agreeing, the row is STALE and this
-# fails, which is the same anti-rot discipline as WHATWG_ONLY_BYTES / BIG5_INDEX_DIVERGENCE below. The
-# reasons are the contract text in docs/COMPATIBILITY.md; keep the two in step.
+# fails, which is the same anti-rot discipline as WHATWG_ONLY_BYTES / BIG5_INDEX_DIVERGENCE in
+# tools/enc_check.py. The reasons are the contract text in docs/COMPATIBILITY.md; keep the two in step.
 _U32LE = b"\xff\xfe\x00\x00" + '<html><body><p class="c">café</p></body></html>'.encode("utf-32-le")
 _U16LE_NOBOM = '<?xml version="1.0"?><html><body><p class="c">café</p></body></html>'.encode("utf-16-le")
 _U16BE_NOBOM = '<?xml version="1.0"?><html><body><p class="c">café</p></body></html>'.encode("utf-16-be")

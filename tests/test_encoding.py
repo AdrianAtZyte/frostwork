@@ -125,7 +125,6 @@ def test_replacement_codec():
     assert "café".encode("replacement") == "café".encode()
 
 
-
 def test_the_codecs_stream():
     body = bytes(range(256))
     text = decode(body, "x-user-defined")
@@ -141,6 +140,7 @@ def test_the_codecs_stream():
     assert io.TextIOWrapper(io.BytesIO(b"abc"), encoding="replacement", errors="replace").read() == "\ufffd"
     assert codecs.getreader("replacement")(io.BytesIO(b"abc"), "replace").read() == "\ufffd"
     assert b"".join(codecs.iterencode(["caf", "é"], "replacement")) == "café".encode()
+
 
 def test_bom_encoding():
     assert bom_encoding(b"\xef\xbb\xbfx") == ("UTF-8", 3)
@@ -161,7 +161,18 @@ def test_importing_the_encoding_api_skips_the_page_object_layer():
     assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
 
 
+def test_the_page_object_layer_registers_no_codecs():
+    code = "import sys, frostwork; frostwork.extract(b'', []); print('frostwork.encoding' in sys.modules)"
+    assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
+
+
+def test_submodules_are_attributes():
+    code = "import frostwork; frostwork.page.extract, frostwork.validation.ValidationReport"
+    subprocess.check_call([sys.executable, "-c", code])
+
+
 @pytest.mark.parametrize("name", list(_CODEC_NAMES))
 def test_decode_matches_the_native_decoder(name):
-    body = bytes(range(256)) * 2 + bytes(b for b1 in range(0x80, 0x100, 7) for b in (b1, 0xA1)) + b"\x1b$B<R\x1b(B"
+    pairs = bytes(b for b1 in range(0x80, 0x100, 7) for b in (b1, 0xA1))
+    body = bytes(range(256)) * 2 + pairs + b"\x1b$B<R\x1b(B"
     assert decode(body, name) == native_decode(body, name)
