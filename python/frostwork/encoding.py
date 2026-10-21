@@ -110,7 +110,7 @@ def autodetect_encoding(body: bytes, *, url: Optional[str] = None) -> str:
     return _autodetect_encoding(body, url=url)
 
 
-def decode(body: bytes, label: str) -> str:
+def decode(body: Buffer, label: str) -> str:
     """*body* decoded with the WHATWG decoder of *label*, a WHATWG label or a Python codec name,
     replacing invalid input with U+FFFD.
 
@@ -120,6 +120,7 @@ def decode(body: bytes, label: str) -> str:
     name = resolve_label(label)
     if name is None:
         raise LookupError(f"unknown encoding: {label}")
+    body = bytes(body)
     if name == "UTF-8":
         # Python's UTF-8 decoder replaces invalid input as WHATWG's does, and builds the str directly.
         return body.decode("utf-8", "replace")
@@ -259,4 +260,8 @@ _CODECS = {
         name="replacement",
     ),
 }
+# Python has no codec for these two WHATWG encodings, so without them the names `codec_name()` returns
+# for them would fail in `str.encode()`, `bytes.decode()` and w3lib's `resolve_encoding()` and
+# `to_unicode()`. The codec registry is process-wide, so docs/PYTHON.md tells users that importing
+# this module registers them.
 codecs.register(lambda name: _CODECS.get(encodings.normalize_encoding(name)))

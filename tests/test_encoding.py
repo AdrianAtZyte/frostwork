@@ -83,6 +83,12 @@ def test_decode(label, body, text):
     assert decode(body, label) == text
 
 
+@pytest.mark.parametrize("label", ["utf-8", "windows-1252", "gbk"])
+@pytest.mark.parametrize("buffer", [bytearray, memoryview])
+def test_decode_accepts_any_buffer(label, buffer):
+    assert decode(buffer(b"caf\xe9"), label) == decode(b"caf\xe9", label)
+
+
 def test_decode_refuses_an_unknown_label():
     with pytest.raises(LookupError):
         decode(b"x", "cp437")
