@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import codecs
 import encodings
+import sys
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, Tuple, cast
 
 if TYPE_CHECKING:
-    from typing_extensions import Buffer
+    if sys.version_info >= (3, 12):
+        from collections.abc import Buffer
+    else:
+        from typing_extensions import Buffer
 
 from ._frostwork import autodetect_encoding as _autodetect_encoding
 from ._frostwork import bom_encoding as _bom_encoding
@@ -122,7 +126,7 @@ def decode(body: Buffer, label: str) -> str:
         raise LookupError(f"unknown encoding: {label}")
     body = bytes(body)
     if name == "UTF-8":
-        # Python's UTF-8 decoder replaces invalid input as WHATWG's does, and builds the str directly.
+        # Python's UTF-8 decoder replaces invalid input as WHATWG's does.
         return body.decode("utf-8", "replace")
     if name in _SINGLE_BYTE:
         return codecs.charmap_decode(body, "strict", _single_byte_table(name))[0]  # type: ignore[arg-type]
@@ -141,8 +145,7 @@ _SINGLE_BYTE = frozenset(
 
 @lru_cache(maxsize=None)
 def _single_byte_table(name: str) -> str:
-    """The decoder of the single-byte encoding *name*, as a table for :func:`codecs.charmap_decode`,
-    which builds the str faster than the native decoder can hand one over."""
+    """The decoder of the single-byte encoding *name*, as a table for :func:`codecs.charmap_decode`."""
     return _decode(bytes(range(256)), name)
 
 

@@ -9,10 +9,11 @@ For Scrapy / web-poet page objects, see `frostwork.webpoet` (requires the ``web-
 the ``frostwork[webpoet]`` extra).
 """
 
-from importlib import import_module
-from typing import TYPE_CHECKING, Any
+from importlib import import_module as _import_module
+from typing import TYPE_CHECKING as _TYPE_CHECKING
+from typing import Any as _Any
 
-if TYPE_CHECKING:
+if _TYPE_CHECKING:
     from .encoding import resolve_label
     from .page import (
         FieldReport,
@@ -52,8 +53,8 @@ _EXPORTS = {
 __all__ = [*_EXPORTS, "__version__"]
 
 
-def __getattr__(name: str) -> Any:
-    value: Any
+def __getattr__(name: str) -> _Any:
+    value: _Any
     if name == "__version__":
         try:
             from importlib.metadata import version
@@ -62,9 +63,9 @@ def __getattr__(name: str) -> Any:
         except Exception:  # pragma: no cover - source tree without installed metadata
             value = "0.0.0+unknown"
     elif name in _EXPORTS:
-        value = getattr(import_module(f".{_EXPORTS[name]}", __name__), name)
+        value = getattr(_import_module(f".{_EXPORTS[name]}", __name__), name)
     elif name in {"page", "validation"}:
-        value = import_module(f".{name}", __name__)
+        value = _import_module(f".{name}", __name__)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     globals()[name] = value
