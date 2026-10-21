@@ -304,17 +304,12 @@ pub(crate) fn meta_prescan(head: &[u8]) -> Option<&'static Encoding> {
 /// are in the encoding section of docs/COMPATIBILITY.md and gated in `tools/enc_check.py`; each one is
 /// a place where w3lib and browsers disagree and Frostwork follows the browser.
 pub fn resolve(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> &'static Encoding {
-    decide(html, override_label, url).0
-}
-
-/// [`resolve`], with the length of the BOM the encoding came from, 0 if none (see [`bom`]).
-pub(crate) fn decide(html: &[u8], override_label: Option<&str>, url: Option<&str>) -> (&'static Encoding, usize) {
-    if let Some(found) = bom(html) {
-        return found;
+    if let Some((enc, _)) = bom(html) {
+        return enc;
     }
     if let Some(label) = override_label {
         if let Some(enc) = Encoding::for_label(label.as_bytes()) {
-            return (enc, 0);
+            return enc;
         }
     }
     // The prescan is NOT bounded by a byte window, because a browser's is not. WHATWG's 1024 is a
@@ -331,7 +326,7 @@ pub(crate) fn decide(html: &[u8], override_label: Option<&str>, url: Option<&str
     //
     // Deliberately NOT stopped at `<body>` (w3lib's regex does), because a real page can carry a late
     // `<meta charset>` inside the body and browsers still honour it.
-    (meta_prescan(html).unwrap_or_else(|| autodetect(html, url)), 0)
+    meta_prescan(html).unwrap_or_else(|| autodetect(html, url))
 }
 
 /// The encoding the start of `html` fixes before any label is consulted, with the length of the BOM

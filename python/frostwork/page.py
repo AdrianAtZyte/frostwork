@@ -39,7 +39,7 @@ from ._frostwork import extract_grouped as _extract_grouped
 from ._frostwork import resolve_label as _resolve_label
 
 __all__ = [
-    "extract", "extract_grouped", "check", "detect_encoding", "Page", "Item",
+    "extract", "extract_grouped", "check", "Page", "Item",
     "SchemaReport", "FieldReport", "GroupReport", "UnsupportedSelector",
 ]
 
@@ -175,19 +175,11 @@ def _validate_grouped(
 
 
 def detect_encoding(html: Bytesish, encoding: Optional[str] = None, *, url: Optional[str] = None) -> str:
-    """The encoding :func:`extract` would scan ``html`` with, as a WHATWG name (``"windows-1252"``).
-
-    BOM → BOM-less UTF-16 prefix → ``encoding`` label → ``<meta>``/XML-declaration prescan of the head →
-    UTF-8 if valid, else autodetected, informed by the top-level domain of *url*. Exposed on its own because nothing else in a scraper's stack answers this the way a browser
-    does: ``parsel.Selector(body=…)`` never sniffs (it defaults to UTF-8), and w3lib — what Scrapy
-    uses — stops at ``<body>`` and at the first declaration it cannot resolve. See the Encoding section
-    of docs/COMPATIBILITY.md for the enumerated differences.
-
-    Always returns a real encoding. A label naming none is ignored rather than propagated (WHATWG's
-    "failure, continue"), matching what :func:`extract` then does with the document; the stricter
-    validation :func:`extract` applies to a *caller's* label is deliberately not repeated here, since
-    the question this answers is "what will be used", not "is this input acceptable".
-    """
+    warnings.warn(
+        "frostwork.page.detect_encoding() is deprecated, use frostwork.detect_encoding() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return _detect_encoding(_as_scan_input(html), encoding, url=url)
 
 

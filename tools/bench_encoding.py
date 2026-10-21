@@ -70,7 +70,7 @@ def main() -> None:
     parser.add_argument("--size", type=int, default=300_000)
     parser.add_argument("--reps", type=int, default=20)
     args = parser.parse_args()
-    print(f"{'':<34} {'frostwork':>12} {'w3lib':>12} {'ratio':>7}")
+    print(f"{'':<34} {'frostwork':>12} {'Scrapy':>12} {'ratio':>7}")
     for encoding in TEXT:
         body = page(encoding, args.size)
         same = decode(body, encoding) == to_unicode(body, encoding)

@@ -13,7 +13,7 @@ from importlib import import_module as _import_module
 import typing as _typing
 
 if _typing.TYPE_CHECKING:
-    from .encoding import resolve_label
+    from .encoding import detect_encoding, resolve_label
     from .page import (
         FieldReport,
         GroupReport,
@@ -22,7 +22,6 @@ if _typing.TYPE_CHECKING:
         SchemaReport,
         UnsupportedSelector,
         check,
-        detect_encoding,
         extract,
         extract_grouped,
     )
@@ -35,7 +34,7 @@ _EXPORTS = {
     "extract": "page",
     "extract_grouped": "page",
     "check": "page",
-    "detect_encoding": "page",
+    "detect_encoding": "encoding",
     "resolve_label": "encoding",
     "Page": "page",
     "Item": "page",

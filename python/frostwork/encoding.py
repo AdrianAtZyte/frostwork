@@ -4,7 +4,7 @@ import codecs
 import encodings
 import sys
 from functools import lru_cache
-from typing import TYPE_CHECKING, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Optional, Tuple, Union, cast
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 12):
@@ -16,7 +16,7 @@ from ._frostwork import autodetect_encoding as _autodetect_encoding
 from ._frostwork import bom_encoding as _bom_encoding
 from ._frostwork import declared_encoding as _declared_encoding
 from ._frostwork import decode as _decode
-from ._frostwork import detect as _detect
+from ._frostwork import detect_encoding as _detect_encoding
 from ._frostwork import resolve_label as _resolve_label
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "codec_name",
     "declared_encoding",
     "decode",
-    "detect",
+    "detect_encoding",
     "resolve_label",
 ]
 
@@ -81,20 +81,24 @@ def codec_name(label: str) -> Optional[str]:
     return None if name is None else _CODEC_NAMES[name]
 
 
-def detect(body: Buffer, label: Optional[str] = None, *, url: Optional[str] = None) -> Tuple[str, int]:
-    """The encoding of *body* and the length of the BOM at its start, 0 if none.
+def detect_encoding(
+    html: Union[Buffer, str], encoding: Optional[str] = None, *, url: Optional[str] = None
+) -> str:
+    """The encoding :func:`frostwork.extract` would scan *html* with, as a WHATWG name.
 
-    The encoding is the first answer of :func:`bom_encoding`, *label*, :func:`declared_encoding` and
-    :func:`autodetect_encoding`, in that order, as in :func:`frostwork.detect_encoding`.
+    That is the first answer of :func:`bom_encoding`, the *encoding* label, :func:`declared_encoding`
+    and :func:`autodetect_encoding`, in that order. A label that names no encoding is ignored, as
+    browsers do. A ``str`` is already-decoded text, so the answer is ``"UTF-8"``. See the Encoding
+    section of docs/COMPATIBILITY.md for how this differs from w3lib.
     """
-    return _detect(bytes(body), None if label is None else resolve_label(label), url=url)
+    return _detect_encoding(html if isinstance(html, (bytes, str)) else bytes(html), encoding, url=url)
 
 
 def bom_encoding(body: Buffer) -> Optional[Tuple[str, int]]:
     """The encoding the byte order mark at the start of *body* names, and the length of that BOM.
 
     A UTF-16 document that starts with an XML declaration and no BOM is recognized too, with length
-    0. A UTF-32 BOM is not a BOM, as in browsers.
+    0. A UTF-32LE BOM reads as a UTF-16LE one, as in browsers.
     """
     return _bom_encoding(bytes(body))
 
@@ -118,7 +122,7 @@ def decode(body: Buffer, label: str) -> str:
     """*body* decoded with the WHATWG decoder of *label*, a WHATWG label or a Python codec name,
     replacing invalid input with U+FFFD.
 
-    A BOM is decoded like any other bytes; strip the length :func:`detect` returns first. Raises
+    A BOM is decoded like any other bytes; strip the length :func:`bom_encoding` returns first. Raises
     :exc:`LookupError` if :func:`resolve_label` cannot resolve *label*.
     """
     name = resolve_label(label)
@@ -149,7 +153,7 @@ def _single_byte_table(name: str) -> str:
     return _decode(bytes(range(256)), name)
 
 
-_X_USER_DEFINED_DECODING = "".join(chr(b) if b < 0x80 else chr(0xF700 + b) for b in range(256))
+_X_USER_DEFINED_DECODING = _single_byte_table("x-user-defined")
 _X_USER_DEFINED_ENCODING = codecs.charmap_build(_X_USER_DEFINED_DECODING)
 
 

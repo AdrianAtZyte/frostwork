@@ -222,6 +222,11 @@ def test_page_resolve_label_is_deprecated():
         assert frostwork.page.resolve_label("cp874") == "windows-874"
 
 
+def test_page_detect_encoding_is_deprecated():
+    with pytest.warns(DeprecationWarning, match=r"frostwork\.detect_encoding\(\)"):
+        assert frostwork.page.detect_encoding(b"<p>x", "cp874") == "windows-874"
+
+
 def test_submodules_are_attributes():
     code = "import frostwork; frostwork.page.extract, frostwork.validation.ValidationReport"
     subprocess.check_call([sys.executable, "-c", code])

@@ -15,7 +15,7 @@ from frostwork.encoding import (
     codec_name,
     declared_encoding,
     decode,
-    detect,
+    detect_encoding,
     resolve_label,
 )
 
@@ -32,29 +32,30 @@ DOCUMENTS = [
 
 
 def _steps(body, label=None, url=None):
-    """`frostwork.detect_encoding`, composed from the steps the way w3lib would compose them."""
+    """`detect_encoding`, composed from the steps the way w3lib would compose them."""
     bom = bom_encoding(body)
     if bom is not None:
-        return bom
+        return bom[0]
     resolved = label and resolve_label(label)
-    return resolved or declared_encoding(body) or autodetect_encoding(body, url=url), 0
+    return resolved or declared_encoding(body) or autodetect_encoding(body, url=url)
 
 
 @pytest.mark.parametrize("name,body", DOCUMENTS, ids=[name for name, _ in DOCUMENTS])
 @pytest.mark.parametrize("label", [None, "windows-1251"])
 def test_the_steps_decide_and_decode_like_extract(name, body, label):
-    encoding, bom_length = _steps(body, label)
-    assert detect(body, label) == (encoding, bom_length)
-    assert encoding == frostwork.detect_encoding(body, label)
+    encoding = _steps(body, label)
+    assert detect_encoding(body, label) == encoding
+    bom = bom_encoding(body)
+    bom_length = bom[1] if bom else 0
     text = decode(body[bom_length:], encoding)
     assert frostwork.extract(text, ["p.c::text"]) == frostwork.extract(body, ["p.c::text"], label)
 
 
-def test_detect_resolves_python_codec_names():
+def test_detect_encoding_resolves_python_codec_names():
     body = "<p>日本</p>".encode("cp932")
-    assert detect(body, "cp932") == ("Shift_JIS", 0)
-    assert detect(body, "cp437") == detect(body)
-    assert detect(b"\xef\xbb\xbf" + body, "cp932") == ("UTF-8", 3)
+    assert detect_encoding(body, "cp932") == "Shift_JIS"
+    assert detect_encoding(body, "cp437") == detect_encoding(body)
+    assert detect_encoding(b"\xef\xbb\xbf" + body, "cp932") == "UTF-8"
 
 
 def test_meta_utf_16_is_read_as_utf_8():
@@ -92,7 +93,7 @@ def test_decode_accepts_any_buffer(label, buffer):
 @pytest.mark.parametrize("buffer", [bytearray, memoryview])
 def test_the_steps_accept_any_buffer(buffer):
     body = b"\xef\xbb\xbf<meta charset=gbk><p>caf\xe9"
-    assert detect(buffer(body), "cp1252") == detect(body, "cp1252")
+    assert detect_encoding(buffer(body), "cp1252") == detect_encoding(body, "cp1252")
     assert bom_encoding(buffer(body)) == bom_encoding(body)
     assert declared_encoding(buffer(body)) == declared_encoding(body)
     assert autodetect_encoding(buffer(body), url="https://example.jp/") == autodetect_encoding(

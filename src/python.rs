@@ -344,7 +344,8 @@ fn detect_encoding(
     if let Html::Str(_) = html {
         return Ok("UTF-8");
     }
-    Ok(crate::detect_encoding(html.as_bytes(), encoding, url))
+    let html = html.as_bytes();
+    Ok(py.detach(|| crate::detect_encoding(html, encoding, url)))
 }
 
 /// The BOM step of [`detect_encoding`] alone: `(encoding, bom_length)`, or `None`.
@@ -362,17 +363,8 @@ fn declared_encoding(body: &[u8]) -> Option<&'static str> {
 /// The last step of [`detect_encoding`] alone: UTF-8 if `body` is valid UTF-8, else a guess.
 #[pyfunction]
 #[pyo3(signature = (body, *, url=None))]
-fn autodetect_encoding(body: &[u8], url: Option<&str>) -> &'static str {
-    crate::encoding::autodetect(body, url).name()
-}
-
-/// [`detect_encoding`] for `bytes`, with the length of the BOM the encoding came from. `label` must be
-/// a WHATWG label; `frostwork.encoding` resolves Python codec names before calling this.
-#[pyfunction]
-#[pyo3(signature = (body, label=None, *, url=None))]
-fn detect(body: &[u8], label: Option<&str>, url: Option<&str>) -> (&'static str, usize) {
-    let (enc, bom_length) = crate::encoding::decide(body, label, url);
-    (enc.name(), bom_length)
+fn autodetect_encoding(py: Python<'_>, body: &[u8], url: Option<&str>) -> &'static str {
+    py.detach(|| crate::encoding::autodetect(body, url).name())
 }
 
 /// `body` decoded with the WHATWG decoder of the encoding the WHATWG label `label` names, BOM
@@ -448,7 +440,6 @@ fn _frostwork(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bom_encoding, m)?)?;
     m.add_function(wrap_pyfunction!(declared_encoding, m)?)?;
     m.add_function(wrap_pyfunction!(autodetect_encoding, m)?)?;
-    m.add_function(wrap_pyfunction!(detect, m)?)?;
     m.add_function(wrap_pyfunction!(decode, m)?)?;
     m.add_class::<Plan>()?;
     Ok(())

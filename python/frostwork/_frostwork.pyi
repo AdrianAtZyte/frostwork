@@ -72,8 +72,6 @@ def declared_encoding(body: bytes) -> Optional[str]:
 def autodetect_encoding(body: bytes, *, url: Optional[str] = ...) -> str:
     """``"UTF-8"`` if ``body`` is valid UTF-8, else a guess informed by the top-level domain of
     ``url``."""
-def detect(body: bytes, label: Optional[str] = ..., *, url: Optional[str] = ...) -> Tuple[str, int]:
-    """``(encoding, bom_length)``; ``label`` must be a WHATWG label."""
 def decode(body: bytes, label: str) -> str:
     """``body`` decoded with the WHATWG decoder, BOM included; ``LookupError`` unless ``label`` is a
     WHATWG label."""
