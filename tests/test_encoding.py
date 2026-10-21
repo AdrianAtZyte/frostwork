@@ -101,6 +101,23 @@ def test_the_steps_accept_any_buffer(buffer):
     )
 
 
+@pytest.mark.parametrize(
+    "call",
+    [
+        bom_encoding,
+        declared_encoding,
+        autodetect_encoding,
+        detect_encoding,
+        lambda body: decode(body, "utf-8"),
+        lambda body: decode(body, "gbk"),
+        lambda body: frostwork.extract(body, ["p::text"]),
+    ],
+)
+def test_a_non_buffer_body_is_refused(call):
+    with pytest.raises(TypeError):
+        call(3)
+
+
 def test_decode_refuses_an_unknown_label():
     with pytest.raises(LookupError):
         decode(b"x", "cp437")
@@ -182,6 +199,17 @@ def test_importing_the_encoding_api_skips_the_page_object_layer():
 def test_the_page_object_layer_registers_no_codecs():
     code = "import sys, frostwork; frostwork.extract(b'', []); print('frostwork.encoding' in sys.modules)"
     assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
+
+
+def test_x_user_defined_resolves_without_its_codec():
+    labels = ["x-user-defined", "X_User_Defined", "x user defined"]
+    code = (
+        "import sys, frostwork, frostwork._frostwork as native;"
+        f"print([native.resolve_label(label) for label in {labels!r}], 'frostwork.encoding' in sys.modules)"
+    )
+    expected = f"{['x-user-defined'] * len(labels)!r} False"
+    assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == expected
+    assert [resolve_label(label) for label in labels] == ["x-user-defined"] * len(labels)
 
 
 @pytest.mark.parametrize("name", list(_CODEC_NAMES))

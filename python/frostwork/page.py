@@ -31,6 +31,7 @@ from typing import Any, Callable, Iterable, Iterator, List, Optional, Protocol, 
 
 from .validation import FieldProcessingError, ValidationReport, validate_item
 
+from ._buffer import as_scan_input as _as_scan_input
 from ._frostwork import Plan as _Plan
 from ._frostwork import audit_schema as _audit_schema
 from ._frostwork import detect_encoding as _detect_encoding
@@ -80,16 +81,6 @@ class Response(Protocol):
 
     @property
     def encoding(self) -> Optional[str]: ...
-
-
-def _as_scan_input(html: Bytesish) -> Union[bytes, str]:
-    """What the engine scans. `bytes` and `str` both cross the FFI boundary as-is — the native layer
-    borrows a `str`'s UTF-8 view instead of allocating a second copy of the document (see the `Html`
-    enum in `src/python.rs`), so a caller holding already-decoded text should NOT pre-encode it. Only
-    the remaining bytes-likes need materializing."""
-    if isinstance(html, (bytes, str)):
-        return html
-    return bytes(html)
 
 
 def _query_list(queries) -> List[str]:

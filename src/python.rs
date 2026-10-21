@@ -95,7 +95,16 @@ fn canonical_label(label: &str) -> Option<&'static str> {
 /// `codecs.lookup("shift_jis").name` is `cp932`, and that is what `w3lib.encoding.resolve_encoding`
 /// (Scrapy's `response.encoding`) hands over. Those are translated here, in the Python binding, so the
 /// engine itself stays WHATWG-only.
+///
+/// Python has no `x-user-defined` codec until `frostwork.encoding` registers one, so its spellings are
+/// matched here with the normalization that codec's lookup applies, for the answer not to depend on
+/// whether that module has been imported.
 fn whatwg_via_python_codecs(py: Python<'_>, label: &str) -> Option<&'static str> {
+    let encodings = py.import("encodings").ok()?;
+    let normalized = encodings.call_method1("normalize_encoding", (label.to_lowercase(),)).ok()?;
+    if normalized.extract::<String>().ok()? == "x_user_defined" {
+        return canonical_label("x-user-defined");
+    }
     let codecs = py.import("codecs").ok()?;
     let info = codecs.call_method1("lookup", (label,)).ok()?;
     let name: String = info.getattr("name").ok()?.extract().ok()?;
@@ -356,8 +365,8 @@ fn bom_encoding(body: &[u8]) -> Option<(&'static str, usize)> {
 
 /// The `<meta>`/XML-declaration prescan step of [`detect_encoding`] alone.
 #[pyfunction]
-fn declared_encoding(body: &[u8]) -> Option<&'static str> {
-    crate::encoding::meta_prescan(body).map(|enc| enc.name())
+fn declared_encoding(py: Python<'_>, body: &[u8]) -> Option<&'static str> {
+    py.detach(|| crate::encoding::meta_prescan(body).map(|enc| enc.name()))
 }
 
 /// The last step of [`detect_encoding`] alone: UTF-8 if `body` is valid UTF-8, else a guess.
