@@ -449,7 +449,9 @@ construction.
 - **`frostwork.detect_encoding(body, label=None)`** returns the encoding a scan would use, as a WHATWG
   name — the whole resolution above, reachable without extracting anything. Parsel cannot answer it at
   all (`Selector(body=…)` never sniffs), and w3lib answers differently in the places tabulated below. It
-  is the same function `extract` runs, not a second opinion.
+  is the same function `extract` runs, not a second opinion. `frostwork.encoding` exposes each of its
+  steps, and a `decode()` that decodes as browsers do where Python's codecs differ, such as `euc_jp`;
+  see [PYTHON.md](PYTHON.md#encoding-steps--frostworkencoding).
 
   The label may be a WHATWG label or the Python codec name of a WHATWG encoding (`cp932`, `euc_jp`,
   `big5hkscs`, `cp949`, `utf-16-le`, …), which is what `w3lib.encoding.resolve_encoding`, i.e. Scrapy's

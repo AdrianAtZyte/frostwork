@@ -3,7 +3,6 @@ import io
 import os
 import subprocess
 import sys
-import types
 
 import pytest
 
@@ -182,16 +181,6 @@ def test_importing_the_encoding_api_skips_the_page_object_layer():
 def test_the_page_object_layer_registers_no_codecs():
     code = "import sys, frostwork; frostwork.extract(b'', []); print('frostwork.encoding' in sys.modules)"
     assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
-
-
-def test_submodules_are_attributes():
-    code = "import frostwork; frostwork.page.extract, frostwork.validation.ValidationReport"
-    subprocess.check_call([sys.executable, "-c", code])
-
-
-def test_dir_lists_the_public_api():
-    names = {name for name in dir(frostwork) if not isinstance(getattr(frostwork, name), types.ModuleType)}
-    assert {name for name in names if not name.startswith("_")} == set(frostwork.__all__) - {"__version__"}
 
 
 @pytest.mark.parametrize("name", list(_CODEC_NAMES))

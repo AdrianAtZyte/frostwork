@@ -3,7 +3,7 @@
 Python harness (needs `parsel`). `oracle.py` guards the oracle toolchain (libxml2 ≥ 2.14 — a pinned
 lxml does *not* pin its vendored libxml2); `diff_lxml.py` is the gate; `conformant.py`/`families.py`/
 `foreign.py` generate test pages; `enc_check.py` (encoding parity) with `decoder_sweep.py` and `enc_cases.py` (its documents, which
-`tests/test_encoding.py` also runs through `frostwork.encoding`) as its importable halves — the two-byte
+`tests/test_encoding.py` also runs through `frostwork.encoding`) as its importable parts — the two-byte
 enumeration and the four disagreement classes live there because `enc_check` runs its gate at module
 level, so nothing in it could be exercised by a test, and a sweep that quietly narrows reads exactly
 like a clean run; `sel_fuzz.py`/`diff_fuzz.py`
