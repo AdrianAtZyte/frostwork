@@ -87,9 +87,9 @@ Use it when another part of the pipeline needs the selected label. See
 ### Encoding steps — `frostwork.encoding`
 
 `frostwork.encoding` is for a library that keeps its own encoding API and wants browser answers behind
-it, as w3lib does for Scrapy's `response.encoding` and `response.text`. `detect()` makes the whole
-decision of `detect_encoding` and also returns the length of the BOM to skip; the other functions run
-one step of that decision each.
+it, as w3lib does for Scrapy's `response.encoding` and `response.text`. `detect()` runs all of
+`detect_encoding` and also returns the length of the BOM to skip; the other functions run one step of
+it each.
 
 <!-- doc-test: encoding-steps -->
 ```python
@@ -108,10 +108,10 @@ assert decode(b"\xa1\xc1 \xad\xa1", "euc_jp") == "～ ①"  # Python's euc_jp co
 assert codec_name("Shift_JIS") == "cp932"
 ```
 
-Every step returns a WHATWG name, and `codec_name()` gives the Python codec name for any label.
-Importing `frostwork.encoding`, which the first access to `frostwork.resolve_label` also does,
-registers Python codecs for `x-user-defined` and `replacement`, the two names `codec_name()` can return
-that Python lacks, in the whole process.
+Every step returns a WHATWG name, and `codec_name()` gives the Python codec name for any label
+`resolve_label()` resolves. Importing `frostwork.encoding`, which the first access to
+`frostwork.resolve_label` also does, registers Python codecs for `x-user-defined` and `replacement`,
+the two names `codec_name()` can return that Python lacks, in the whole process.
 
 ## 2. Declarative `Page` / `Item`
 

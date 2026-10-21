@@ -13,6 +13,7 @@ import argparse
 import subprocess
 import sys
 import timeit
+from typing import Callable
 
 from charset_normalizer import from_bytes
 from w3lib.encoding import html_body_declared_encoding, to_unicode
@@ -49,11 +50,11 @@ def whatwg(name: str | None) -> str | None:
     return None if name is None else resolve_label(name)
 
 
-def best(stmt, reps: int) -> float:
+def best(stmt: Callable[[], object], reps: int) -> float:
     return min(timeit.repeat(stmt, number=1, repeat=reps))
 
 
-def row(name: str, ours, theirs, reps: int, same: bool) -> None:
+def row(name: str, ours: Callable[[], object], theirs: Callable[[], object], reps: int, same: bool) -> None:
     a, b = best(ours, reps), best(theirs, reps)
     note = "" if same else "  (answers differ)"
     print(f"{name:<34} {a * 1e3:9.3f} ms {b * 1e3:9.3f} ms {a / b:7.2f}{note}")
