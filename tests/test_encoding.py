@@ -1,0 +1,149 @@
+import codecs
+import os
+import subprocess
+import sys
+
+import pytest
+
+import frostwork
+from frostwork._frostwork import decode as native_decode
+from frostwork.encoding import (
+    _CODEC_NAMES,
+    autodetect_encoding,
+    bom_encoding,
+    codec_name,
+    declared_encoding,
+    decode,
+    detect,
+    resolve_label,
+)
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
+import enc_cases  # noqa: E402
+
+DOCUMENTS = [
+    *enc_cases.documents(),
+    ("UTF-16 with a BOM", '<html><body><p class="c">café</p></body></html>'.encode("utf-16")),
+    ("UTF-8 with a BOM", b"\xef\xbb\xbf<html><body>" + enc_cases.U8 + b"</body></html>"),
+    ("undeclared Shift_JIS", '<p class="c">日本語のページです。こんにちは、世界。</p>'.encode("shift_jis")),
+    ("<meta charset=iso-2022-kr>", b"<meta charset=iso-2022-kr>" + enc_cases.W1252),
+]
+
+
+def _steps(body, label=None, url=None):
+    """`frostwork.detect_encoding`, composed from the steps the way w3lib composes them."""
+    bom = bom_encoding(body)
+    if bom is not None:
+        return bom
+    resolved = label and resolve_label(label)
+    return resolved or declared_encoding(body) or autodetect_encoding(body, url=url), 0
+
+
+@pytest.mark.parametrize("name,body", DOCUMENTS, ids=[name for name, _ in DOCUMENTS])
+@pytest.mark.parametrize("label", [None, "windows-1251"])
+def test_the_steps_decide_and_decode_like_extract(name, body, label):
+    encoding, bom_length = _steps(body, label)
+    assert detect(body, label) == (encoding, bom_length)
+    assert encoding == frostwork.detect_encoding(body, label)
+    text = decode(body[bom_length:], encoding)
+    assert frostwork.extract(text, ["p.c::text"]) == frostwork.extract(body, ["p.c::text"], label)
+
+
+def test_detect_resolves_python_codec_names():
+    body = "<p>日本</p>".encode("cp932")
+    assert detect(body, "cp932") == ("Shift_JIS", 0)
+    assert detect(body, "cp437") == detect(body)
+    assert detect(b"\xef\xbb\xbf" + body, "cp932") == ("UTF-8", 3)
+
+
+def test_meta_utf_16_is_read_as_utf_8():
+    body = b'<meta charset="utf-16"><p class="c">caf\xc3\xa9</p>'
+    assert declared_encoding(body) == "UTF-8"
+    assert decode(body, declared_encoding(body)).endswith("café</p>")
+
+
+def test_euc_jp_decodes_like_a_browser():
+    assert decode(b"\xa1\xc1 \xad\xa1", "euc_jp") == "～ ①"
+
+
+@pytest.mark.parametrize(
+    "label,body,text",
+    [
+        ("x-user-defined", b"caf\xe9 ok", "caf ok"),
+        ("iso-2022-kr", b"caf\xe9 ok", "�"),
+        ("hz-gb-2312", b"caf\xe9 ok", "�"),
+        ("iso-2022-kr", b"", ""),
+        ("gb18030", b"\x80", "€"),
+        ("windows-1252", b"\x81", "\x81"),
+        ("utf-8", b"\xed\xa0\x80 \xf0\x9f", "��� �"),
+    ],
+)
+def test_decode(label, body, text):
+    assert decode(body, label) == text
+
+
+def test_decode_refuses_an_unknown_label():
+    with pytest.raises(LookupError):
+        decode(b"x", "cp437")
+
+
+def test_every_whatwg_encoding_has_a_python_codec():
+    assert len(_CODEC_NAMES) == 40  # https://encoding.spec.whatwg.org/#names-and-labels
+    for whatwg, python in _CODEC_NAMES.items():
+        assert resolve_label(whatwg) == whatwg
+        assert codecs.lookup(python).name == python
+        assert codec_name(whatwg) == python
+        if whatwg != "ISO-8859-8-I":  # one index, two names
+            assert resolve_label(python) == whatwg
+
+
+def test_codec_name():
+    assert codec_name("latin1") == "cp1252"
+    assert codec_name("shift_jis") == "cp932"
+    assert codec_name("cp437") is None
+
+
+@pytest.mark.parametrize("errors", ["strict", "replace", "ignore", "xmlcharrefreplace"])
+def test_x_user_defined_codec(errors):
+    assert bytes(range(256)).decode("x-user-defined", errors) == decode(bytes(range(256)), "x-user-defined")
+    assert "a".encode("x-user-defined", errors) == b"a\xe9"
+    if errors == "strict":
+        with pytest.raises(UnicodeEncodeError):
+            "é".encode("x-user-defined", errors)
+    else:
+        want = {"replace": b"?", "ignore": b"", "xmlcharrefreplace": b"&#233;"}[errors]
+        assert "é".encode("x-user-defined", errors) == want
+
+
+def test_replacement_codec():
+    assert b"".decode("replacement") == ""
+    assert b"abc".decode("replacement", "replace") == "�"
+    assert b"abc".decode("replacement", "ignore") == ""
+    with pytest.raises(UnicodeDecodeError):
+        b"abc".decode("replacement")
+    assert "café".encode("replacement") == "café".encode()
+
+
+def test_bom_encoding():
+    assert bom_encoding(b"\xef\xbb\xbfx") == ("UTF-8", 3)
+    assert bom_encoding(b"\xfe\xffx") == ("UTF-16BE", 2)
+    assert bom_encoding(b"\xff\xfe\x00\x00") == ("UTF-16LE", 2)
+    assert bom_encoding(b"\x00<\x00?") == ("UTF-16BE", 0)
+    assert bom_encoding(b"<p>") is None
+
+
+def test_autodetect_encoding_reads_the_tld():
+    assert autodetect_encoding(b"<p>\x82\xa0</p>") == "IBM866"
+    assert autodetect_encoding(b"<p>\x82\xa0</p>", url="https://example.jp/") == "Shift_JIS"
+    assert autodetect_encoding(b"<p>\xc3") == "UTF-8"
+
+
+def test_importing_the_encoding_api_skips_the_page_object_layer():
+    code = "import sys, frostwork.encoding; print('frostwork.page' in sys.modules)"
+    assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
+
+
+@pytest.mark.parametrize("name", list(_CODEC_NAMES))
+def test_decode_matches_the_native_decoder(name):
+    body = bytes(range(256)) * 2 + bytes(b for b1 in range(0x80, 0x100, 7) for b in (b1, 0xA1)) + b"\x1b$B<R\x1b(B"
+    assert decode(body, name) == native_decode(body, name)

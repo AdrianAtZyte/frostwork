@@ -35,7 +35,7 @@ from ._frostwork import audit_schema as _audit_schema
 from ._frostwork import detect_encoding as _detect_encoding
 from ._frostwork import extract as _extract
 from ._frostwork import extract_grouped as _extract_grouped
-from ._frostwork import resolve_label as _resolve_label
+from .encoding import resolve_label
 
 __all__ = [
     "extract", "extract_grouped", "check", "detect_encoding", "Page", "Item",
@@ -129,7 +129,7 @@ def _check_encoding(html: Bytesish, encoding: Optional[str]) -> Optional[str]:
     """
     if encoding is None:
         return None
-    canonical = _resolve_label(encoding)
+    canonical = resolve_label(encoding)
     if canonical is None:
         try:
             codecs.lookup(encoding)
@@ -188,15 +188,6 @@ def detect_encoding(html: Bytesish, encoding: Optional[str] = None, *, url: Opti
     the question this answers is "what will be used", not "is this input acceptable".
     """
     return _detect_encoding(_as_scan_input(html), encoding, url=url)
-
-
-def resolve_label(label: str) -> Optional[str]:
-    """The WHATWG name of the encoding charset *label* names (``"cp874"`` → ``"windows-874"``), or
-    ``None`` if it names none (``"cp437"``).
-
-    *label* can be a WHATWG label or a Python codec name, e.g. Scrapy's ``response.encoding``.
-    """
-    return _resolve_label(label)
 
 
 def extract(

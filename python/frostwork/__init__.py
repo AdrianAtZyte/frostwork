@@ -9,43 +9,64 @@ For Scrapy / web-poet page objects, see `frostwork.webpoet` (requires the ``web-
 the ``frostwork[webpoet]`` extra).
 """
 
-from .page import (
-    FieldReport,
-    GroupReport,
-    Item,
-    Page,
-    SchemaReport,
-    UnsupportedSelector,
-    check,
-    detect_encoding,
-    extract,
-    extract_grouped,
-    resolve_label,
-)
-from .validation import FieldProcessingError, ItemValidationError, ValidationIssue, ValidationReport
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
-try:
-    from importlib.metadata import version as _version
+if TYPE_CHECKING:
+    from .encoding import resolve_label
+    from .page import (
+        FieldReport,
+        GroupReport,
+        Item,
+        Page,
+        SchemaReport,
+        UnsupportedSelector,
+        check,
+        detect_encoding,
+        extract,
+        extract_grouped,
+    )
+    from .validation import FieldProcessingError, ItemValidationError, ValidationIssue, ValidationReport
 
-    __version__ = _version("frostwork")
-except Exception:  # pragma: no cover - source tree without installed metadata
-    __version__ = "0.0.0+unknown"
+    __version__: str
 
-__all__ = [
-    "extract",
-    "extract_grouped",
-    "check",
-    "detect_encoding",
-    "resolve_label",
-    "Page",
-    "Item",
-    "SchemaReport",
-    "FieldReport",
-    "GroupReport",
-    "UnsupportedSelector",
-    "FieldProcessingError",
-    "ItemValidationError",
-    "ValidationIssue",
-    "ValidationReport",
-    "__version__",
-]
+# Imported on first access, so that `import frostwork.encoding` does not pay for the page-object layer.
+_EXPORTS = {
+    "extract": "page",
+    "extract_grouped": "page",
+    "check": "page",
+    "detect_encoding": "page",
+    "resolve_label": "encoding",
+    "Page": "page",
+    "Item": "page",
+    "SchemaReport": "page",
+    "FieldReport": "page",
+    "GroupReport": "page",
+    "UnsupportedSelector": "page",
+    "FieldProcessingError": "validation",
+    "ItemValidationError": "validation",
+    "ValidationIssue": "validation",
+    "ValidationReport": "validation",
+}
+
+__all__ = [*_EXPORTS, "__version__"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "__version__":
+        try:
+            from importlib.metadata import version
+
+            value = version("frostwork")
+        except Exception:  # pragma: no cover - source tree without installed metadata
+            value = "0.0.0+unknown"
+    elif name in _EXPORTS:
+        value = getattr(import_module(f".{_EXPORTS[name]}", __name__), name)
+    else:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), *__all__})

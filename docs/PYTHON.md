@@ -84,6 +84,36 @@ frostwork.resolve_label("cp437")   # None
 Use it when another part of the pipeline needs the selected label. See
 [encoding compatibility](COMPATIBILITY.md#encoding) for the differences from Parsel and w3lib.
 
+### Encoding steps — `frostwork.encoding`
+
+`frostwork.encoding` is for a library that keeps its own encoding API and wants browser answers behind
+it, as w3lib does for Scrapy's `response.encoding` and `response.text`. `detect()` makes the whole
+decision of `detect_encoding` and also returns the length of the BOM to skip; the other functions run
+one step of that decision each. Importing it does not load the page-object layer.
+
+<!-- doc-test: encoding-steps -->
+```python
+from frostwork.encoding import (
+    autodetect_encoding, bom_encoding, codec_name, declared_encoding, decode, detect,
+)
+
+body = b"\xef\xbb\xbf<p>caf\xc3\xa9</p>"
+name, bom_length = detect(body, "cp1252")  # a BOM outranks the label
+assert decode(body[bom_length:], name) == "<p>café</p>"
+
+assert bom_encoding(b"\xff\xfe<\x00") == ("UTF-16LE", 2)  # the encoding and the BOM length
+assert declared_encoding(b"<meta charset=utf-16>") == "UTF-8"
+assert autodetect_encoding(b"<p>\x82\xa0</p>", url="https://example.jp/") == "Shift_JIS"
+assert decode(b"\xa1\xc1 \xad\xa1", "euc_jp") == "～ ①"  # Python's euc_jp codec loses the ①
+assert codec_name("Shift_JIS") == "cp932"
+```
+
+Every step returns a WHATWG name, and `codec_name()` gives the Python codec name for any label.
+Importing the module registers the two Python codecs it can return that Python lacks,
+`x-user-defined` and `replacement`, so those names work with `str.encode()` and `bytes.decode()`, and
+everything built on them, such as w3lib's `resolve_encoding()` and `to_unicode()`, in the whole
+process.
+
 ## 2. Declarative `Page` / `Item`
 
 <!-- doc-test: named-item -->

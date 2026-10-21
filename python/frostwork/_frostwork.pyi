@@ -65,6 +65,15 @@ def detect_encoding(
     autodetected, informed by the top-level domain of ``url``. A ``str`` is already-decoded text, so
     the answer is ``"UTF-8"`` without sniffing."""
 
+def bom_encoding(body: bytes) -> Optional[Tuple[str, int]]: ...
+def declared_encoding(body: bytes) -> Optional[str]: ...
+def autodetect_encoding(body: bytes, *, url: Optional[str] = ...) -> str: ...
+def detect(body: bytes, label: Optional[str] = ..., *, url: Optional[str] = ...) -> Tuple[str, int]:
+    """``(encoding, bom_length)``; ``label`` must be a WHATWG label."""
+def decode(body: bytes, label: str) -> str:
+    """``body`` decoded with the WHATWG decoder, BOM included; ``LookupError`` unless ``label`` is a
+    WHATWG label."""
+
 class Plan:
     """A schema compiled once (budget validated at construction) and reused across pages."""
 
