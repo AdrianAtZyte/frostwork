@@ -16,7 +16,7 @@ from typing_extensions import assert_type
 
 # Deliberate errors: `frostwork` exports its names lazily, and if a type checker ever read them as `Any`,
 # these ignores would go unused and fail the check.
-from frostwork import Pgae  # type: ignore[attr-defined]
+from frostwork import NoSuchName  # type: ignore[attr-defined]
 from frostwork import extract_grouped, resolve_label
 from frostwork.webpoet import FrostBrowserPage, FrostFields, FrostPage, Many, One, field
 

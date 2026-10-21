@@ -87,9 +87,9 @@ Use it when another part of the pipeline needs the selected label. See
 ### Encoding steps — `frostwork.encoding`
 
 `frostwork.encoding` is for a library that keeps its own encoding API and wants browser answers behind
-it, as w3lib does for Scrapy's `response.encoding` and `response.text`. `detect()` runs all of
-`detect_encoding` and also returns the length of the BOM to skip; the other functions run one step of
-it each.
+it, as w3lib does for Scrapy's `response.encoding` and `response.text`. `detect()` does what
+`detect_encoding()` does and also returns the length of the BOM to skip; the other functions run one
+step of it each.
 
 <!-- doc-test: encoding-steps -->
 ```python

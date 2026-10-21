@@ -19,8 +19,6 @@ mypy==2.3.0
 # `tools/release_check.py` is imported by the full test suite, including the Python 3.10 ABI floor;
 # `tomllib` only joined the standard library in Python 3.11.
 tomli==2.2.1; python_version < "3.11"
-# What Scrapy autodetects undeclared pages with, the baseline of `tools/bench_encoding.py`.
-charset-normalizer==3.5.1
 
 # The web-poet integration's oracle (tools/diff_webpoet.py). `zyte-common-items` is the primary
 # consumer of `frostwork.webpoet`, and its absence here is why the strings-only processor bug could

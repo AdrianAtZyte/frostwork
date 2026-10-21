@@ -5,7 +5,7 @@
 #
 # Run:  .venv/bin/python tools/bench_encoding.py [--size BYTES] [--reps N]
 #
-# Build the extension RELEASE-first (`maturin develop --release`).
+# Build the extension RELEASE-first (`maturin develop --release`) and `make bootstrap-bench`.
 
 from __future__ import annotations
 
