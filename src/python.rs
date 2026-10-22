@@ -96,17 +96,18 @@ fn canonical_label(label: &str) -> Option<&'static str> {
 /// (Scrapy's `response.encoding`) hands over. Those are translated here, in the Python binding, so the
 /// engine itself stays WHATWG-only.
 ///
-/// Python has no `x-user-defined` codec until `frostwork.encoding` registers one, so its spellings are
-/// matched here with the normalization that codec's lookup applies, for the answer not to depend on
-/// whether that module has been imported.
+/// Python has no `x-user-defined` codec until `frostwork.encoding` registers one, so a label Python
+/// does not know is matched against its spellings with the normalization that codec's lookup applies,
+/// for the answer not to depend on whether that module has been imported.
 fn whatwg_via_python_codecs(py: Python<'_>, label: &str) -> Option<&'static str> {
-    let encodings = py.import("encodings").ok()?;
-    let normalized = encodings.call_method1("normalize_encoding", (label.to_lowercase(),)).ok()?;
-    if normalized.extract::<String>().ok()? == "x_user_defined" {
-        return canonical_label("x-user-defined");
-    }
     let codecs = py.import("codecs").ok()?;
-    let info = codecs.call_method1("lookup", (label,)).ok()?;
+    let Ok(info) = codecs.call_method1("lookup", (label,)) else {
+        let encodings = py.import("encodings").ok()?;
+        let normalized = encodings.call_method1("normalize_encoding", (label.to_lowercase(),)).ok()?;
+        return (normalized.extract::<String>().ok()? == "x_user_defined")
+            .then(|| canonical_label("x-user-defined"))
+            .flatten();
+    };
     let name: String = info.getattr("name").ok()?.extract().ok()?;
     let whatwg = match name.as_str() {
         "cp932" => "shift_jis",
