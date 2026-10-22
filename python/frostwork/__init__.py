@@ -65,7 +65,7 @@ if not _typing.TYPE_CHECKING:
                 value = "0.0.0+unknown"
         elif name in _EXPORTS:
             value = getattr(_import_module(f".{_EXPORTS[name]}", __name__), name)
-        elif name in {"page", "validation"}:
+        elif name in {"encoding", "page", "validation"}:
             value = _import_module(f".{name}", __name__)
         else:
             raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

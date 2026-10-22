@@ -228,7 +228,7 @@ def test_page_detect_encoding_is_deprecated():
 
 
 def test_submodules_are_attributes():
-    code = "import frostwork; frostwork.page.extract, frostwork.validation.ValidationReport"
+    code = "import frostwork; frostwork.encoding.decode, frostwork.page.extract, frostwork.validation.ValidationReport"
     subprocess.check_call([sys.executable, "-c", code])
 
 
