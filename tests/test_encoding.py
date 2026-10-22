@@ -201,15 +201,21 @@ def test_the_page_object_layer_registers_no_codecs():
     assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == "False"
 
 
-def test_x_user_defined_resolves_without_its_codec():
-    labels = ["x-user-defined", "X_User_Defined", "x user defined"]
+@pytest.mark.parametrize(
+    "name,labels",
+    [
+        ("x-user-defined", ["x-user-defined", "X_User_Defined", "x user defined"]),
+        ("replacement", ["replacement", "Replacement!", "_replacement"]),
+    ],
+)
+def test_resolves_without_its_codec(name, labels):
     code = (
         "import sys, frostwork, frostwork._frostwork as native;"
         f"print([native.resolve_label(label) for label in {labels!r}], 'frostwork.encoding' in sys.modules)"
     )
-    expected = f"{['x-user-defined'] * len(labels)!r} False"
+    expected = f"{[name] * len(labels)!r} False"
     assert subprocess.check_output([sys.executable, "-c", code], text=True).strip() == expected
-    assert [resolve_label(label) for label in labels] == ["x-user-defined"] * len(labels)
+    assert [resolve_label(label) for label in labels] == [name] * len(labels)
 
 
 @pytest.mark.parametrize("name", list(_CODEC_NAMES))

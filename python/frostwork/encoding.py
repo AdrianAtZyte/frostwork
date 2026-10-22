@@ -112,7 +112,7 @@ def declared_encoding(body: Buffer) -> Optional[str]:
 
 def autodetect_encoding(body: Buffer, *, url: Optional[str] = None) -> str:
     """``"UTF-8"`` if *body* is valid UTF-8, else the encoding guessed from its bytes and from the
-    top-level domain of *url*, like Firefox does for a page that declares none."""
+    top-level domain of *url*, as Firefox does for a page that declares none."""
     return _autodetect_encoding(_as_bytes(body), url=url)
 
 

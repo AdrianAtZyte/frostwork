@@ -103,7 +103,7 @@ assert decode(body[3:], "UTF-8") == "<p>café</p>"
 
 assert declared_encoding(b"<meta charset=utf-16>") == "UTF-8"
 assert autodetect_encoding(b"<p>\x82\xa0</p>", url="https://example.jp/") == "Shift_JIS"
-assert decode(b"\xa1\xc1 \xad\xa1", "euc_jp") == "～ ①"  # Python's euc_jp codec loses the ①
+assert decode(b"\xa1\xc1 \xad\xa1", "euc_jp") == "～ ①"  # Python's euc_jp codec gives "〜 ��"
 assert codec_name("Shift_JIS") == "cp932"
 ```
 
