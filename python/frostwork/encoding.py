@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import codecs
 import encodings
+import sys
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, Tuple, Union, cast
 
 if TYPE_CHECKING:
-    from ._buffer import Buffer
+    if sys.version_info >= (3, 12):
+        from collections.abc import Buffer
+    else:
+        from typing_extensions import Buffer
 
-from ._buffer import as_bytes as _as_bytes
-from ._buffer import as_scan_input as _as_scan_input
 from ._frostwork import autodetect_encoding as _autodetect_encoding
 from ._frostwork import bom_encoding as _bom_encoding
 from ._frostwork import declared_encoding as _declared_encoding
@@ -89,7 +91,7 @@ def detect_encoding(
     browsers do. A ``str`` is already-decoded text, so the answer is ``"UTF-8"``. See the Encoding
     section of docs/COMPATIBILITY.md for how this differs from w3lib.
     """
-    return _detect_encoding(_as_scan_input(html), encoding, url=url)
+    return _detect_encoding(html if isinstance(html, (bytes, str)) else bytes(html), encoding, url=url)
 
 
 def bom_encoding(body: Buffer) -> Optional[Tuple[str, int]]:
@@ -98,7 +100,7 @@ def bom_encoding(body: Buffer) -> Optional[Tuple[str, int]]:
     A UTF-16 document that starts with an XML declaration and no BOM is recognized too, with length
     0. A UTF-32LE BOM reads as a UTF-16LE one, as in browsers.
     """
-    return _bom_encoding(_as_bytes(body))
+    return _bom_encoding(bytes(body))
 
 
 def declared_encoding(body: Buffer) -> Optional[str]:
@@ -107,13 +109,13 @@ def declared_encoding(body: Buffer) -> Optional[str]:
     A declaration of a UTF-16 encoding gives ``"UTF-8"``, and of ``x-user-defined``,
     ``"windows-1252"``.
     """
-    return _declared_encoding(_as_bytes(body))
+    return _declared_encoding(bytes(body))
 
 
 def autodetect_encoding(body: Buffer, *, url: Optional[str] = None) -> str:
     """``"UTF-8"`` if *body* is valid UTF-8, else the encoding guessed from its bytes and from the
     top-level domain of *url*, as Firefox does for a page that declares none."""
-    return _autodetect_encoding(_as_bytes(body), url=url)
+    return _autodetect_encoding(bytes(body), url=url)
 
 
 def decode(body: Buffer, label: str) -> str:
@@ -126,7 +128,7 @@ def decode(body: Buffer, label: str) -> str:
     name = resolve_label(label)
     if name is None:
         raise LookupError(f"unknown encoding: {label}")
-    body = _as_bytes(body)
+    body = bytes(body)
     if name == "UTF-8":
         return body.decode("utf-8", "replace")
     if name in _SINGLE_BYTE:

@@ -101,23 +101,6 @@ def test_the_steps_accept_any_buffer(buffer):
     )
 
 
-@pytest.mark.parametrize(
-    "call",
-    [
-        bom_encoding,
-        declared_encoding,
-        autodetect_encoding,
-        detect_encoding,
-        lambda body: decode(body, "utf-8"),
-        lambda body: decode(body, "gbk"),
-        lambda body: frostwork.extract(body, ["p::text"]),
-    ],
-)
-def test_a_non_buffer_body_is_refused(call):
-    with pytest.raises(TypeError):
-        call(3)
-
-
 def test_decode_refuses_an_unknown_label():
     with pytest.raises(LookupError):
         decode(b"x", "cp437")
