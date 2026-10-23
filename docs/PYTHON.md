@@ -113,6 +113,30 @@ Every step returns a WHATWG name, and `codec_name()` gives the Python codec name
 `x-user-defined` and `replacement`, the two names `codec_name()` can return that Python lacks, in the
 whole process.
 
+### Base URL and meta refresh — `frostwork.navigation`
+
+`navigation()` reads the base URL and meta refresh of a document as a browser does, and
+`Page.extract_with_navigation()` reads them in the same pass as the fields:
+
+<!-- doc-test: navigation -->
+```python
+from frostwork import Page, navigation
+
+html = b'<base href="/shop/"><meta http-equiv="refresh" content="5;url=sale"><h1>Mug</h1>'
+assert navigation(html, "https://example.com/p") == (
+    "https://example.com/shop/", (5.0, "https://example.com/shop/sale"),
+)
+
+page = Page().field("title", "h1::text")
+item, nav = page.extract_with_navigation(html, "https://example.com/p", meta_refresh=False)
+assert item.value("title") == "Mug" and nav.meta_refresh is None
+```
+
+The whole document counts. Of several refreshes, the one with the shortest delay wins, and of equal
+delays, the later one. `<noscript>` content is ignored as by a browser running scripts, unless you pass
+`scripting=False`. Where Chromium and Firefox disagree, the answer is Firefox's. URLs come back serialized
+as the URL standard does, e.g. `https://example.com/` for `https://EXAMPLE.com`.
+
 ## 2. Declarative `Page` / `Item`
 
 <!-- doc-test: named-item -->

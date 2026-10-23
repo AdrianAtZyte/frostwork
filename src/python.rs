@@ -279,6 +279,54 @@ impl Plan {
         let bytes = html.as_bytes();
         Ok(py.detach(|| self.inner.extract(bytes, encoding, url)))
     }
+
+    /// `extract_grouped`, also returning the document's base URL and meta refresh, read in the same
+    /// pass as `navigation` reads them: `(flat_columns, grouped, (base_url, meta_refresh))`.
+    #[pyo3(signature = (html, url, encoding=None, *, base_url=true, meta_refresh=true, scripting=true))]
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    fn extract_with_navigation(
+        &self,
+        py: Python<'_>,
+        html: Html<'_>,
+        url: &str,
+        encoding: Option<&str>,
+        base_url: bool,
+        meta_refresh: bool,
+        scripting: bool,
+    ) -> PyResult<(Vec<Vec<String>>, Vec<Vec<Vec<Vec<String>>>>, PyNavigation)> {
+        let encoding = html.encoding(py, encoding)?;
+        let bytes = html.as_bytes();
+        let options = crate::NavOptions { base_url, meta_refresh, scripting };
+        let (flat, grouped, nav) =
+            py.detach(|| self.inner.extract_with_navigation(bytes, encoding, url, options));
+        Ok((flat, grouped, py_navigation(nav)))
+    }
+}
+
+/// `(base_url, meta_refresh)`, with the refresh delay as a float, which is how Scrapy compares it.
+type PyNavigation = (Option<String>, Option<(f64, String)>);
+
+fn py_navigation(nav: crate::Navigation) -> PyNavigation {
+    (nav.base_url, nav.meta_refresh.map(|(delay, url)| (delay as f64, url)))
+}
+
+/// The document's base URL and meta refresh, as a browser reads them, in one pass over `html`:
+/// `(base_url, meta_refresh)`. The pure-Python `frostwork.navigation` wraps this into a `Navigation`.
+#[pyfunction]
+#[pyo3(signature = (html, url, encoding=None, *, base_url=true, meta_refresh=true, scripting=true))]
+fn navigation(
+    py: Python<'_>,
+    html: Html<'_>,
+    url: &str,
+    encoding: Option<&str>,
+    base_url: bool,
+    meta_refresh: bool,
+    scripting: bool,
+) -> PyResult<PyNavigation> {
+    let encoding = html.encoding(py, encoding)?;
+    let bytes = html.as_bytes();
+    let options = crate::NavOptions { base_url, meta_refresh, scripting };
+    Ok(py_navigation(py.detach(|| crate::navigation(bytes, encoding, url, options))))
 }
 
 /// One streaming pass over `html`, returning one value-column per query (in query order) — the exact
@@ -453,6 +501,7 @@ fn _frostwork(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(declared_encoding, m)?)?;
     m.add_function(wrap_pyfunction!(autodetect_encoding, m)?)?;
     m.add_function(wrap_pyfunction!(decode, m)?)?;
+    m.add_function(wrap_pyfunction!(navigation, m)?)?;
     m.add_class::<Plan>()?;
     Ok(())
 }

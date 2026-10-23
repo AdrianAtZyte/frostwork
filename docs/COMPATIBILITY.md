@@ -458,6 +458,9 @@ construction.
   `response.encoding`, returns from a `Content-Type` header. A label naming a real encoding WHATWG has
   no equivalent for (`utf-7`, `utf-32`, `cp437`, …) is ignored the way a browser ignores it, "failure,
   continue": the document is sniffed instead, and `detect_encoding` reports what that landed on.
+- **`frostwork.navigation()`** reads the base URL and meta refresh as browsers do, over the whole
+  document, and in the same pass as the fields with `Page.extract_with_navigation()`; see
+  [PYTHON.md](PYTHON.md#base-url-and-meta-refresh--frostworknavigation).
 - **`frostwork.check` / `frostwork-audit`** answer "will this schema run?" *before* a scrape, per selector,
   with a reason. lxml has no equivalent question to ask — every selector "works", and a wrong one is an
   empty column at runtime. See [PYTHON.md](PYTHON.md) §4 and [MIGRATION.md](MIGRATION.md).

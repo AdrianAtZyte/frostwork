@@ -13,19 +13,27 @@ from importlib import import_module as _import_module
 import typing as _typing
 
 if _typing.TYPE_CHECKING:
-    from .encoding import detect_encoding, resolve_label
+    # `X as X` marks each name as re-exported, which type checkers run with `no_implicit_reexport`
+    # (mypy --strict) require, since they cannot read `__all__` below.
+    from ._navigation import MetaRefresh as MetaRefresh, Navigation as Navigation, navigation as navigation
+    from .encoding import detect_encoding as detect_encoding, resolve_label as resolve_label
     from .page import (
-        FieldReport,
-        GroupReport,
-        Item,
-        Page,
-        SchemaReport,
-        UnsupportedSelector,
-        check,
-        extract,
-        extract_grouped,
+        FieldReport as FieldReport,
+        GroupReport as GroupReport,
+        Item as Item,
+        Page as Page,
+        SchemaReport as SchemaReport,
+        UnsupportedSelector as UnsupportedSelector,
+        check as check,
+        extract as extract,
+        extract_grouped as extract_grouped,
     )
-    from .validation import FieldProcessingError, ItemValidationError, ValidationIssue, ValidationReport
+    from .validation import (
+        FieldProcessingError as FieldProcessingError,
+        ItemValidationError as ItemValidationError,
+        ValidationIssue as ValidationIssue,
+        ValidationReport as ValidationReport,
+    )
 
     __version__: str
 
@@ -36,6 +44,9 @@ _EXPORTS = {
     "check": "page",
     "detect_encoding": "encoding",
     "resolve_label": "encoding",
+    "navigation": "_navigation",
+    "Navigation": "_navigation",
+    "MetaRefresh": "_navigation",
     "Page": "page",
     "Item": "page",
     "SchemaReport": "page",

@@ -16,6 +16,7 @@ their own production selectors, which is the mode that matters: the generated ta
 signature filter at −13% to −55% and the corpus scored it at zero, while the tokenizer fix the tables
 could not see was worth −75% on a real page),
 `bench_encoding.py` (`frostwork.encoding` against Python's codecs, w3lib and charset-normalizer),
+`bench_navigation.py` (`frostwork.navigation` against w3lib's base URL and meta refresh functions),
 `bench_matrix.py`/`bench_corpus.py`/`bench_mem.py`/
 `bench_webpoet.py` (benchmarks; the last one times `to_item()` at the PAGE-OBJECT level and verifies both
 items are identical before timing either; `--boundaries` measures the three shapes where the healthy-path

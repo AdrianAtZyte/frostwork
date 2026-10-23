@@ -72,6 +72,16 @@ def declared_encoding(body: bytes) -> Optional[str]:
 def autodetect_encoding(body: bytes, *, url: Optional[str] = ...) -> str:
     """``"UTF-8"`` if ``body`` is valid UTF-8, else a guess informed by the top-level domain of
     ``url``."""
+def navigation(
+    html: Union[bytes, str],
+    url: str,
+    encoding: Optional[str] = ...,
+    *,
+    base_url: bool = ...,
+    meta_refresh: bool = ...,
+    scripting: bool = ...,
+) -> Tuple[Optional[str], Optional[Tuple[float, str]]]:
+    """``(base_url, meta_refresh)`` as a browser reads them."""
 def decode(body: bytes, label: str) -> str:
     """``body`` decoded with the WHATWG decoder, BOM included; ``LookupError`` unless ``label`` is a
     WHATWG label."""
@@ -94,3 +104,15 @@ class Plan:
     def extract_grouped(
         self, html: Union[bytes, str], encoding: Optional[str] = ..., *, url: Optional[str] = ...
     ) -> Tuple[List[List[str]], List[List[List[List[str]]]]]: ...
+    def extract_with_navigation(
+        self,
+        html: Union[bytes, str],
+        url: str,
+        encoding: Optional[str] = ...,
+        *,
+        base_url: bool = ...,
+        meta_refresh: bool = ...,
+        scripting: bool = ...,
+    ) -> Tuple[
+        List[List[str]], List[List[List[List[str]]]], Tuple[Optional[str], Optional[Tuple[float, str]]]
+    ]: ...

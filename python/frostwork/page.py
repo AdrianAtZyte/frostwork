@@ -37,6 +37,7 @@ from ._frostwork import detect_encoding as _detect_encoding
 from ._frostwork import extract as _extract
 from ._frostwork import extract_grouped as _extract_grouped
 from ._frostwork import resolve_label as _resolve_label
+from ._navigation import Navigation, _from_native
 
 __all__ = [
     "extract", "extract_grouped", "check", "Page", "Item",
@@ -751,16 +752,43 @@ class Page:
         raise :class:`UnsupportedSelector` by default. Construct with ``Page(strict=False)`` or pass
         ``strict=False`` here for permissive empty results. A successful default validation is cached
         until the schema changes."""
-        use_strict = self._strict if strict is None else strict
-        if use_strict and not self._validated:
-            self.check().raise_for_status()
-            self._validated = True
+        self._validate(strict)
         encoding = _check_encoding(html, encoding)
         body = _as_scan_input(html)
         plan = self._get_plan()  # compiled once, reused across pages
         if not self._groups:
             return Item._from_columns(self._fields, plan.extract(body, encoding, url=url))
-        flat_cols, grouped = plan.extract_grouped(body, encoding, url=url)
+        return self._item(*plan.extract_grouped(body, encoding, url=url))
+
+    def extract_with_navigation(
+        self,
+        html: Bytesish,
+        url: str,
+        encoding: Optional[str] = None,
+        *,
+        base_url: bool = True,
+        meta_refresh: bool = True,
+        scripting: bool = True,
+        strict: Optional[bool] = None,
+    ) -> Tuple["Item", Navigation]:
+        """Like :meth:`extract`, also reading the base URL and meta refresh of *html*, the document at
+        *url*, in the same pass. *base_url*, *meta_refresh* and *scripting* work as in
+        :func:`~frostwork.navigation`."""
+        self._validate(strict)
+        encoding = _check_encoding(html, encoding)
+        flat_cols, grouped, nav = self._get_plan().extract_with_navigation(
+            _as_scan_input(html), url, encoding,
+            base_url=base_url, meta_refresh=meta_refresh, scripting=scripting,
+        )
+        return self._item(flat_cols, grouped), _from_native(nav)
+
+    def _validate(self, strict: Optional[bool]) -> None:
+        use_strict = self._strict if strict is None else strict
+        if use_strict and not self._validated:
+            self.check().raise_for_status()
+            self._validated = True
+
+    def _item(self, flat_cols: List[List[str]], grouped: List[List[List[List[str]]]]) -> "Item":
         gout: dict = {}
         for (name, g), rows in zip(self._groups.items(), grouped):
             shaped = [{sn: _shape(col, sub.card) for (sn, sub), col in zip(g.subfields.items(), row)}
